@@ -20,7 +20,10 @@ void _Py_InitVersion(void)
     if (initialized) {
         return;
     }
+    /* 😭 no changes done (Stock CPython) */
     initialized = 1;
+
+    /* 😁 changes done here */
     /*
      * Custom runtime branding:
      * I injected '[GuardPVM v1.0, %.80s]' inside the compiler bracket.
@@ -32,6 +35,8 @@ void _Py_InitVersion(void)
 #else
     const char *buildinfo_format = "%.80s (%.80s) [GuardPVM v1.0, %.80s]";
 #endif
+
+    /* 😭 no changes done (Stock CPython) */
     PyOS_snprintf(version, sizeof(version), buildinfo_format,
                   PY_VERSION, Py_GetBuildInfo(), Py_GetCompiler());
 }

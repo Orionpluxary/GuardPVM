@@ -181,7 +181,7 @@
 
 /*
  * =========================================================================
- * ORIGINAL UPSTREAM CPYTHON CODE (Python/ceval_macros.h):
+ * 😭 no changes done (Original stock CPython code)
  * =========================================================================
  * #ifdef Py_DEBUG
  * #define PRE_DISPATCH_GOTO() do { \
@@ -194,21 +194,14 @@
  * #endif
  *
  * =========================================================================
- * MY MODIFICATION: GUARD_PVM_STEP() HOOK
+ * 😁 changes done here
  * =========================================================================
  * In release mode, stock CPython leaves PRE_DISPATCH_GOTO() as a no-op ((void)0).
  * I hooked GUARD_PVM_STEP() directly here so that every single instruction
- * passes through my odometer and quota check right before execution:
- *
- * 1. Count instruction execution (_Py_GuardPVM_State.steps_executed++).
- * 2. Record opcode frequency in the opcode_counts array (0-511).
- * 3. Enforce deterministic step quota:
- *    - Disarm the quota temporarily so traceback generation doesn't fault.
- *    - Sync frame->instr_ptr and next_instr so Python shows the exact line number.
- *    - Raise RuntimeError("GuardPVM step quota exceeded").
- *    - Jump to CPython's standard 'goto error;' for clean stack frame unwinding.
+ * passes through my odometer and quota check right before execution.
  * =========================================================================
  */
+/* 😁 changes done here */
 #define GUARD_PVM_STEP() do { \
     _Py_GuardPVM_State.steps_executed++; \
     if ((unsigned int)(opcode) < 512) { \
@@ -233,6 +226,7 @@
 #else
 #define PRE_DISPATCH_GOTO() GUARD_PVM_STEP()
 #endif
+/* 😭 no changes done (Stock CPython below) */
 
 #ifdef Py_DEBUG
 #define LLTRACE_RESUME_FRAME() \

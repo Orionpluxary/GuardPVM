@@ -568,7 +568,10 @@ pycore_init_runtime(_PyRuntimeState *runtime,
      */
     _PyRuntimeState_SetFinalizing(runtime, NULL);
 
+    /* 😭 no changes done (Stock CPython) */
     _Py_InitVersion();
+
+    /* 😁 changes done here */
     /*
      * Boot hook:
      * I added _Py_GuardPVM_Init() here in the early runtime lifecycle
@@ -576,6 +579,8 @@ pycore_init_runtime(_PyRuntimeState *runtime,
      * parsed before importlib or user scripts execute.
      */
     _Py_GuardPVM_Init();
+
+    /* 😭 no changes done (Stock CPython) */
     _Py_DumpTraceback_Init();
 
     status = _Py_HashRandomization_Init(config);

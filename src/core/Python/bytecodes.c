@@ -5941,6 +5941,8 @@ dummy_func(
 
             assert(_PyEval_BinaryOps[oparg]);
             PyObject *res_o = _PyEval_BinaryOps[oparg](lhs_o, rhs_o);
+
+            /* 😁 changes done here */
             if (res_o == NULL) {
                 if (PyErr_ExceptionMatches(PyExc_ZeroDivisionError)) {
                     _Py_GuardPVM_State.zero_div_count++;
@@ -5953,6 +5955,8 @@ dummy_func(
                     ERROR_NO_POP();
                 }
             }
+
+            /* 😭 no changes done (Stock CPython below) */
             res = PyStackRef_FromPyObjectSteal(res_o);
             l = lhs;
             r = rhs;

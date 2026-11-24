@@ -44,8 +44,13 @@ Data members:
 #include "pycore_pystats.h"
 #include "pycore_runtime.h"
 #include "pycore_structseq.h"
+/* 😭 no changes done (Stock CPython headers) */
 #include "pycore_sysmodule.h"
+
+/* 😁 changes done here */
 #include "pycore_guardpvm.h"      /* GuardPVM: shared runtime state and API declarations */
+
+/* 😭 no changes done (Stock CPython headers) */
 #include "pycore_unicodeobject.h"
 
 #include "pydtrace.h"             /* [KEYWORD: DTrace Probe] Low-level system performance tracing */
@@ -2914,22 +2919,13 @@ sys_get_lazy_imports_impl(PyObject *module)
 }
 
 
-/*
+/* 😭 no changes done (Stock CPython above) */
+
+/* =========================================================================
+ * 😁 changes done here
  * =========================================================================
  * GUARDPVM SYS MODULE INTERFACE
- * =========================================================================
- * In stock CPython, the sys module provides no way to query or restrict
- * bytecode-level execution metrics from Python code.
- *
- * I implemented and registered 6 new functions in sys_methods[]:
- * 1. sys.set_step_quota(limit)   - sets max allowed instruction steps (0 = unlimited)
- * 2. sys.get_step_quota()        - queries current step budget
- * 3. sys.get_guard_stats()       - returns dictionary of execution telemetry
- * 4. sys.reset_guard_stats()     - resets odometer and fault counters to 0
- * 5. sys.set_div_mode(mode)      - configures zero-division mode ('strict' or 'recover')
- * 6. sys.get_div_mode()          - returns active division mode string
- * =========================================================================
- */
+ * ========================================================================= */
 
 /* sys.set_step_quota(limit: int) */
 static PyObject *
@@ -2996,13 +2992,14 @@ sys_get_div_mode(PyObject *self, PyObject *Py_UNUSED(ignored))
 }
 
 static PyMethodDef sys_methods[] = {
+    /* 😁 changes done here */
     {"set_step_quota", (PyCFunction)sys_set_step_quota, METH_O, "set_step_quota(limit) -> None"},
     {"get_step_quota", (PyCFunction)sys_get_step_quota, METH_NOARGS, "get_step_quota() -> int"},
     {"get_guard_stats", (PyCFunction)sys_get_guard_stats, METH_NOARGS, "get_guard_stats() -> dict"},
     {"reset_guard_stats", (PyCFunction)sys_reset_guard_stats, METH_NOARGS, "reset_guard_stats() -> None"},
     {"set_div_mode", (PyCFunction)sys_set_div_mode, METH_O, "set_div_mode(mode: str) -> None"},
     {"get_div_mode", (PyCFunction)sys_get_div_mode, METH_NOARGS, "get_div_mode() -> str"},
-    /* Might as well keep this in alphabetic order */
+    /* 😭 no changes done (Stock CPython methods below) */
     SYS_ADDAUDITHOOK_METHODDEF
     SYS_AUDIT_METHODDEF
     {"breakpointhook", _PyCFunction_CAST(sys_breakpointhook),
