@@ -1,0 +1,56 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# C / C++ Build artifacts
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+*.exe
+
+# Large binary distribution archives
+*.tar.gz
+*.tar
+*.zip
+*.7z
+install/
+
+# Packaging & Distribution
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Environment Variables & Secrets
+.env
+.env.local
+
+# OS Metadata
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
