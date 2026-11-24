@@ -1,5 +1,11 @@
 
 /* =============================================================================
+ * 😁 changes done here (Modified CPython file)
+ * - Line 48: Added pycore_guardpvm.h header include
+ * - Line 2920: Implemented sys.set_step_quota, get_guard_stats, set_div_mode C APIs
+ * - Line 2994: Registered new methods in sys_methods[] table
+ * - Rest of this file is standard stock CPython (😭 no changes done)
+ * =============================================================================
  * FILE PURPOSE:
  * Standard CPython 'sys' module C implementation.
  * Exposes GuardPVM's control dials to Python userspace: sys.set_step_quota(),

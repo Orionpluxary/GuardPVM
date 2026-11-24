@@ -1,4 +1,6 @@
 # =============================================================================
+# 😁 changes done here (100% New File: VM Telemetry & Overhead Benchmark)
+# =============================================================================
 # FILE PURPOSE:
 # Benchmarks GuardPVM instruction-counting and telemetry against standard Python.
 # It measures execution overhead across multi-million operation compute loops

@@ -1,4 +1,6 @@
 # =============================================================================
+# 😁 changes done here (100% New File: Zero-Division Recovery Mode Demo)
+# =============================================================================
 # FILE PURPOSE:
 # Demonstrates GuardPVM's configurable Zero-Division handling modes.
 # It proves that in 'strict' mode it behaves 100% like standard Python, but

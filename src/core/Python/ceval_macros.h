@@ -1,4 +1,8 @@
 /* =============================================================================
+ * 😁 changes done here (Modified CPython file)
+ * - Line 206: Replaced PRE_DISPATCH_GOTO with GUARD_PVM_STEP instruction quota hook
+ * - Rest of this file is standard stock CPython (😭 no changes done)
+ * =============================================================================
  * FILE PURPOSE:
  * Defines interpreter dispatch macros and the core GuardPVM instruction hook.
  * Replaces upstream PRE_DISPATCH_GOTO() with GUARD_PVM_STEP() to perform hardware-level

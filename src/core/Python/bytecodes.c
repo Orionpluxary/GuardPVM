@@ -1,4 +1,8 @@
 /* =============================================================================
+ * 😁 changes done here (Modified CPython file)
+ * - Line 5943: Intercepted _BINARY_OP to handle ZeroDivisionError in recover mode
+ * - Rest of this file is standard stock CPython (😭 no changes done)
+ * =============================================================================
  * FILE PURPOSE:
  * Opcode definition file for CPython bytecode instructions.
  * Intercepts _BINARY_OP arithmetic operations to catch ZeroDivisionError, increment

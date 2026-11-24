@@ -1,4 +1,8 @@
 /* =============================================================================
+ * 😁 changes done here (Modified CPython file)
+ * - Line 574: Injected _Py_GuardPVM_Init() boot hook into early runtime lifecycle
+ * - Rest of this file is standard stock CPython (😭 no changes done)
+ * =============================================================================
  * FILE PURPOSE:
  * CPython initialization and finalization lifecycle manager.
  * Injects GuardPVM's zero-day initialization hook (_Py_GuardPVM_Init) into the

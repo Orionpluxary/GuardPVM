@@ -1,11 +1,12 @@
 /* =============================================================================
+ * 😁 changes done here (100% New File created for GuardPVM)
+ * Defines _PyGuardPVMState struct and runtime telemetry variables
+ * =============================================================================
  * FILE PURPOSE:
  * Central internal header for GuardPVM runtime state.
  * Defines the shared _PyGuardPVMState struct used by the interpreter loop,
  * sys module, and lifecycle hooks to track steps, quotas, and division modes.
  * ============================================================================= */
-
-/* 😁 changes done here: 100% new file created for GuardPVM */
 #ifndef Py_GUARDPVM_H
 #define Py_GUARDPVM_H
 

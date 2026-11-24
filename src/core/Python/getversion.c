@@ -1,4 +1,8 @@
 /* =============================================================================
+ * 😁 changes done here (Modified CPython file)
+ * - Line 28: Injected '[GuardPVM v1.0]' flavor identifier tag into sys.version
+ * - Rest of this file is standard stock CPython (😭 no changes done)
+ * =============================================================================
  * FILE PURPOSE:
  * Overrides CPython's version and build-information banner strings.
  * Injects the '[GuardPVM v1.0]' flavor identifier tag into sys.version and CLI output

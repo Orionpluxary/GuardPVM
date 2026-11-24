@@ -1,12 +1,13 @@
 /* =============================================================================
+ * 😁 changes done here (100% New File created for GuardPVM)
+ * Implementation of GuardPVM state, environment variable parser, and stats dictionary
+ * =============================================================================
  * FILE PURPOSE:
  * Core implementation file for GuardPVM runtime engine state and lifecycle logic.
  * Implements startup environment variable parsing (GUARD_PVM_STEP_QUOTA, GUARD_PVM_DIV_MODE),
  * telemetry counters, and C-to-Python dictionary serialization for sys.get_guard_stats().
  * Compiled directly into the CPython binary as part of the core runtime.
  * ============================================================================= */
-
-/* 😁 changes done here: 100% new file created for GuardPVM */
 /*
  * GuardPVM runtime implementation.
  *
