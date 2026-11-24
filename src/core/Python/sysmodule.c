@@ -22,31 +22,31 @@ Data members:
 - ps1, ps2: optional primary and secondary prompts (strings)
 */
 
-#include "Python.h"               /* [KEYWORD: Master Core] Saare standard Python C types (PyObject etc.) */
-#include "pycore_audit.h"         /* [KEYWORD: Security Guard] Audit hooks jo security events ko monitor karte hain */
-#include "pycore_call.h"          /* [KEYWORD: Function Invoker] C level se Python functions ko call karne ke helpers */
-#include "pycore_ceval.h"         /* [KEYWORD: Engine Cylinder] Bytecode evaluation loop jahan instructions execute hoti hain */
-#include "pycore_frame.h"         /* [KEYWORD: Call Stack Box] Stack frames (functions ke local variables ka container) */
-#include "pycore_import.h"        /* [KEYWORD: Module Loader] 'import ...' commands ko process karne ke flags */
-#include "pycore_initconfig.h"    /* [KEYWORD: Boot Config] Python boot hone ki initial settings aur status */
-#include "pycore_interpframe.h"   /* [KEYWORD: Frame Inspector] Active call stack ko traverse/read karne ke helpers */
-#include "pycore_long.h"          /* [KEYWORD: Big Numbers] Python ke large integers aur number limits */
-#include "pycore_modsupport.h"    /* [KEYWORD: Module Builder] C code ko Python module ke roop mein expose karne ke tools */
-#include "pycore_namespace.h"     /* [KEYWORD: Name Dictionary] SimpleNamespace objects create karne ke functions */
-#include "pycore_object.h"        /* [KEYWORD: Memory Object] Core object memory aur type inspector */
-#include "pycore_optimizer.h"     /* [KEYWORD: Speed Turbo] Tier-2 bytecode optimizer aur JIT executors */
-#include "pycore_pathconfig.h"    /* [KEYWORD: Path Finder] sys.path calculate karna (files kahan se load hongi) */
-#include "pycore_pyerrors.h"      /* [KEYWORD: Red Alert] Python exceptions aur errors ko catch/raise karna */
-#include "pycore_pylifecycle.h"   /* [KEYWORD: Life Cycle] Python ka start (boot) hona aur safely band (shutdown) hona */
-#include "pycore_pymath.h"        /* [KEYWORD: Math Formulae] Decimal floats aur floating point math calculations */
-#include "pycore_pymem.h"         /* [KEYWORD: RAM Allocator] CPython ka internal memory allocation aur cleanup */
-#include "pycore_pystate.h"       /* [KEYWORD: Thread Tracker] Har running thread ka live state aur status */
-#include "pycore_pystats.h"       /* [KEYWORD: Performance Meter] VM performance profiling aur specialization stats */
-#include "pycore_runtime.h"       /* [KEYWORD: Global Runtime] Pura global Python process state */
-#include "pycore_structseq.h"     /* [KEYWORD: Named Tuples] C structures ko Python tuples (jaise sys.version_info) banana */
-#include "pycore_sysmodule.h"     /* [KEYWORD: Sys Internals] sys module ki internal C function declarations */
-#include "pycore_guardpvm.h"      /* 🛡️ [KEYWORD: GuardPVM Engine] Odometer (Step counter), Fuel Limit (Quota) aur Airbag! */
-#include "pycore_unicodeobject.h" /* [KEYWORD: Text & Strings] Python ke string / Unicode objects aur text cache */
+#include "Python.h"
+#include "pycore_audit.h"
+#include "pycore_call.h"
+#include "pycore_ceval.h"
+#include "pycore_frame.h"
+#include "pycore_import.h"
+#include "pycore_initconfig.h"
+#include "pycore_interpframe.h"
+#include "pycore_long.h"
+#include "pycore_modsupport.h"
+#include "pycore_namespace.h"
+#include "pycore_object.h"
+#include "pycore_optimizer.h"
+#include "pycore_pathconfig.h"
+#include "pycore_pyerrors.h"
+#include "pycore_pylifecycle.h"
+#include "pycore_pymath.h"
+#include "pycore_pymem.h"
+#include "pycore_pystate.h"
+#include "pycore_pystats.h"
+#include "pycore_runtime.h"
+#include "pycore_structseq.h"
+#include "pycore_sysmodule.h"
+#include "pycore_guardpvm.h"      /* GuardPVM: shared runtime state and API declarations */
+#include "pycore_unicodeobject.h"
 
 #include "pydtrace.h"             /* [KEYWORD: DTrace Probe] Low-level system performance tracing */
 #include "osdefs.h"               /* [KEYWORD: OS Settings] Operating system ke delimiters (jaise Windows me '\\' vs Linux me '/') */
@@ -2914,94 +2914,85 @@ sys_get_lazy_imports_impl(PyObject *module)
 }
 
 
-/* =========================================================================
- * 🛡️ GUARDPVM SYS MODULE INTERFACE (Driver's Cockpit)
+/*
  * =========================================================================
- * 
- * [WHAT CHANGED]:
- * Original Python `sys` module mein GuardPVM ke koi functions nahi the.
- * Humne CPython ke core `sys_methods[]` table mein 6 native C functions add kiye:
- * 1. sys.set_step_quota(limit)
- * 2. sys.get_step_quota()
- * 3. sys.get_guard_stats()
- * 4. sys.reset_guard_stats()
- * 5. sys.set_div_mode(mode)
- * 6. sys.get_div_mode()
- * 
- * [WHY IT IS USED]:
- * High-level Python developer ya SDK (Node.js/Python) ko PVM engine ke low-level
- * C dials ko control karne ke liye standard Python interface chahiye hota hai.
- * CPython ke `sys` module se behtar aur natural jagah koi nahi ho sakti.
- * 
- * [REAL-WORLD USE CASE / VIVA ANSWER]:
- * "Sir, jab koi web framework (jaise FastAPI ya Flask) user ka script run karta hai,
- *  wo run karne se theek pehle `sys.set_step_quota(50000)` set kar deta hai,
- *  aur execute hone ke baad `sys.get_guard_stats()` se dekh leta hai ki exact
- *  kitne instructions consume huye for precise serverless billing."
- * ========================================================================= */
+ * GUARDPVM SYS MODULE INTERFACE
+ * =========================================================================
+ * In stock CPython, the sys module provides no way to query or restrict
+ * bytecode-level execution metrics from Python code.
+ *
+ * I implemented and registered 6 new functions in sys_methods[]:
+ * 1. sys.set_step_quota(limit)   - sets max allowed instruction steps (0 = unlimited)
+ * 2. sys.get_step_quota()        - queries current step budget
+ * 3. sys.get_guard_stats()       - returns dictionary of execution telemetry
+ * 4. sys.reset_guard_stats()     - resets odometer and fault counters to 0
+ * 5. sys.set_div_mode(mode)      - configures zero-division mode ('strict' or 'recover')
+ * 6. sys.get_div_mode()          - returns active division mode string
+ * =========================================================================
+ */
 
-/* DIAL 1: sys.set_step_quota(limit) -> Set maximum instructions budget */
+/* sys.set_step_quota(limit: int) */
 static PyObject *
 sys_set_step_quota(PyObject *self, PyObject *arg)
 {
-    if (!PyLong_Check(arg)) { /* [KEYWORD: Validation] Sirf integer number accept karo */
+    if (!PyLong_Check(arg)) {
         PyErr_SetString(PyExc_TypeError, "limit must be an integer");
         return NULL;
     }
-    long long quota = PyLong_AsLongLong(arg); /* [KEYWORD: Extract] Python object se C number nikala */
+    long long quota = PyLong_AsLongLong(arg);
     if (quota == -1 && PyErr_Occurred()) {
         return NULL;
     }
-    _Py_GuardPVM_SetStepQuota((int64_t)quota); /* [KEYWORD: Store Quota] Engine ke state me budget save */
-    Py_RETURN_NONE; /* [KEYWORD: Done] Python ko None return kiya */
-}
-
-/* DIAL 2: sys.get_step_quota() -> Current limit check karo */
-static PyObject *
-sys_get_step_quota(PyObject *self, PyObject *Py_UNUSED(ignored))
-{
-    return PyLong_FromLongLong(_Py_GuardPVM_GetStepQuota()); /* [KEYWORD: Read Limit] C number ko Python int me pack kiya */
-}
-
-/* DIAL 3: sys.get_guard_stats() -> Live dashboard reading */
-static PyObject *
-sys_get_guard_stats(PyObject *self, PyObject *Py_UNUSED(ignored))
-{
-    return _Py_GuardPVM_GetStats(); /* [KEYWORD: Dashboard] C struct ko Python dict bana kar bhej diya */
-}
-
-/* DIAL 4: sys.reset_guard_stats() -> Odometer ko 0 pe reset karo */
-static PyObject *
-sys_reset_guard_stats(PyObject *self, PyObject *Py_UNUSED(ignored))
-{
-    _Py_GuardPVM_ResetStats(); /* [KEYWORD: Reset Odometer] Steps aur counts 0 kiye */
+    _Py_GuardPVM_SetStepQuota((int64_t)quota);
     Py_RETURN_NONE;
 }
 
-/* DIAL 5: sys.set_div_mode('strict' / 'recover') -> Airbag on ya off karo */
+/* sys.get_step_quota() -> int */
+static PyObject *
+sys_get_step_quota(PyObject *self, PyObject *Py_UNUSED(ignored))
+{
+    return PyLong_FromLongLong(_Py_GuardPVM_GetStepQuota());
+}
+
+/* sys.get_guard_stats() -> dict */
+static PyObject *
+sys_get_guard_stats(PyObject *self, PyObject *Py_UNUSED(ignored))
+{
+    return _Py_GuardPVM_GetStats();
+}
+
+/* sys.reset_guard_stats() -> None */
+static PyObject *
+sys_reset_guard_stats(PyObject *self, PyObject *Py_UNUSED(ignored))
+{
+    _Py_GuardPVM_ResetStats();
+    Py_RETURN_NONE;
+}
+
+/* sys.set_div_mode(mode: str) -> None */
 static PyObject *
 sys_set_div_mode(PyObject *self, PyObject *arg)
 {
-    if (!PyUnicode_Check(arg)) { /* [KEYWORD: Validation] String input verify kiya */
+    if (!PyUnicode_Check(arg)) {
         PyErr_SetString(PyExc_TypeError, "mode must be a string ('strict' or 'recover')");
         return NULL;
     }
-    const char *mode = PyUnicode_AsUTF8(arg); /* [KEYWORD: Read String] String text padha */
+    const char *mode = PyUnicode_AsUTF8(arg);
     if (mode == NULL) {
         return NULL;
     }
-    if (_Py_GuardPVM_SetDivMode(mode) < 0) { /* [KEYWORD: Mode Switch] Airbag state change ki */
+    if (_Py_GuardPVM_SetDivMode(mode) < 0) {
         PyErr_SetString(PyExc_ValueError, "Invalid div_mode: must be 'strict' or 'recover'");
         return NULL;
     }
     Py_RETURN_NONE;
 }
 
-/* DIAL 6: sys.get_div_mode() -> Pata lagao airbag on hai ya off */
+/* sys.get_div_mode() -> str */
 static PyObject *
 sys_get_div_mode(PyObject *self, PyObject *Py_UNUSED(ignored))
 {
-    return PyUnicode_FromString(_Py_GuardPVM_GetDivMode()); /* [KEYWORD: Report Mode] 'strict' ya 'recover' return kiya */
+    return PyUnicode_FromString(_Py_GuardPVM_GetDivMode());
 }
 
 static PyMethodDef sys_methods[] = {

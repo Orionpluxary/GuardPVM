@@ -1,53 +1,40 @@
 /* =============================================================================
  * FILE PURPOSE:
- * Central internal header defining GuardPVM's global runtime telemetry state.
- * Declares the _PyGuardPVMState struct, step quota bounds, and C API functions
- * shared across the interpreter evaluation loop and sys module.
- * Included internally via: #include "pycore_guardpvm.h"
+ * Central internal header for GuardPVM runtime state.
+ * Defines the shared _PyGuardPVMState struct used by the interpreter loop,
+ * sys module, and lifecycle hooks to track steps, quotas, and division modes.
  * ============================================================================= */
 
 #ifndef Py_GUARDPVM_H
 #define Py_GUARDPVM_H
-
-/* =========================================================================
- * 🛡️ GUARDPVM MASTER DEFINITION HEADER
- * =========================================================================
- * 
- * [WHAT CHANGED]:
- * Original CPython mein yeh file exist nahi karti thi! Yeh GuardPVM ka 100% 
- * naya internal header file hai.
- * 
- * [WHY IT IS USED]:
- * 1. Single Source of Truth: Pura VM (ceval loop, bytecodes, sysmodule, pylifecycle)
- *    isi struct ke through aapas mein baat karta hai.
- * 2. Shared Memory: Telemetry stats (steps, opcodes, division faults) ko ek
- *    central memory location par rakhne ke liye taaki zero overhead ho.
- * 
- * [REAL-WORLD USE CASE / VIVA ANSWER]:
- * "Sir, multi-tenant cloud environments (jaise AWS Lambda ya OpenAI Code Interpreter)
- *  mein har user ka Python code kitne low-level instructions consume kar raha hai,
- *  wo track karne ke liye hume kernel-level ya VM-level state struct chahiye hoti hai.
- *  Yeh struct wahi central control unit (ECU) hai."
- * ========================================================================= */
 
 #ifndef Py_PYTHON_H
 #include "Python.h"
 #endif
 #include <stdint.h>
 
-/* =========================================================================
- * GUARDPVM MASTER RUNTIME STATE STRUCT
- * Yeh struct engine ka central memory block hai jahan sab record hota hai.
- * ========================================================================= */
+/*
+ * My implementation: Central state struct.
+ * Stock CPython has no global counters for bytecode execution.
+ * I created this struct to keep all runtime telemetry in one shared location:
+ * - steps_executed: total instructions run by the interpreter
+ * - step_quota: max allowed steps before raising RuntimeError (0 = unlimited)
+ * - call_count: function entry counter
+ * - return_count: function exit counter
+ * - zero_div_count: number of zero-division occurrences intercepted
+ * - div_mode: 0 for standard Python crash (strict), 1 for recover (return 0)
+ * - opcode_counts: histogram array tracking the frequency of each opcode (0-511)
+ * - initialized: flag ensuring boot logic only runs once
+ */
 typedef struct {
-    uint64_t steps_executed;       /* [KEYWORD: Odometer] Total instructions run (Hardware steps) */
-    int64_t  step_quota;           /* [KEYWORD: Fuel Limit] Max steps allowed before abort (0 = unlimited) */
-    uint64_t call_count;           /* [KEYWORD: Entry Sensor] Kitni baar koi function enter hua */
-    uint64_t return_count;         /* [KEYWORD: Exit Sensor] Kitni baar koi function return/finish hua */
-    uint64_t zero_div_count;       /* [KEYWORD: Crash Log] Kitni baar divide-by-zero intercept hua */
-    int      div_mode;             /* [KEYWORD: Airbag Switch] 0 = strict (crash), 1 = recover (return 0) */
-    uint64_t opcode_counts[512];   /* [KEYWORD: Opcode Diary] Har instruction ka frequency tally table */
-    int      initialized;          /* [KEYWORD: Ready Flag] Bootup single-init protection flag */
+    uint64_t steps_executed;
+    int64_t  step_quota;
+    uint64_t call_count;
+    uint64_t return_count;
+    uint64_t zero_div_count;
+    int      div_mode;             /* 0 = strict, 1 = recover */
+    uint64_t opcode_counts[512];
+    int      initialized;
 } _PyGuardPVMState;
 
 extern _PyGuardPVMState _Py_GuardPVM_State;

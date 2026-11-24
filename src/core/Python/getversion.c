@@ -21,20 +21,12 @@ void _Py_InitVersion(void)
         return;
     }
     initialized = 1;
-    /* =========================================================================
-     * 🛡️ GUARDPVM FLAVOR IDENTITY TAG
-     * =========================================================================
-     * [WHAT CHANGED]:
-     * Original CPython banner format: `%.80s (%.80s) [%.80s]`
-     * GuardPVM format: `%.80s (%.80s) [GuardPVM v1.0, %.80s]`
-     * 
-     * [WHY IT IS USED & USE CASE]:
-     * Runtime identity verification. Jab professor ya security team check kare
-     * `python -V` ya `sys.version`, unhe immediately verify ho jata hai ki ye
-     * unmodified vanilla Python nahi balki secure GuardPVM runtime engine hai.
-     * Compiler brackets ke andar rakhna zaroori hota hai taaki `platform.py`
-     * ka regex parser break na ho.
-     * ========================================================================= */
+    /*
+     * Custom runtime branding:
+     * I injected '[GuardPVM v1.0, %.80s]' inside the compiler bracket.
+     * Putting it inside the compiler bracket prevents breaking external tools
+     * (like platform.python_version()) that parse sys.version with regex.
+     */
 #ifdef Py_GIL_DISABLED
     const char *buildinfo_format = "%.80s free-threading build (%.80s) [GuardPVM v1.0, %.80s]";
 #else

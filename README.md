@@ -1,97 +1,101 @@
-# 🛡️ GuardPVM (v1.0)
-### Secure, Sandboxed CPython Runtime with Hardware-Grade Step Quotas & Telemetry
+# GuardPVM (v1.0)
+### Sandboxed CPython Runtime with Instruction Step Quotas & Telemetry
 
-[![Python Version](https://img.shields.io/badge/CPython-3.16-blue.svg)](https://python.org)
-[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20WSL2-orange.svg)]()
-[![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)]()
+[![CPython](https://img.shields.io/badge/CPython-3.16-blue.svg)](https://python.org)
+[![Build](https://img.shields.io/badge/Build-Passing-green.svg)]()
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20WSL2-lightgrey.svg)]()
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)]()
 
-> **GuardPVM** is an enhanced CPython virtual machine engine that enforces deterministic bytecode-level instruction quotas, live execution telemetry, and zero-division recovery directly within the interpreter's dispatch loop.
-
----
-
-## 🚨 The Problem with Stock Python
-
-Standard CPython is designed for trusted local execution. When executing untrusted code (in online coding sandboxes, AI code execution agents, or multi-tenant serverless lambdas), stock Python exhibits critical vulnerabilities:
-
-1. **Denial of Service via Runaway Loops:**  
-   Code like `while True: pass` consumes 100% CPU and locks execution threads. Wall-clock timeouts (e.g. `signal.SIGALRM` or threading timers) are non-deterministic, fail on Windows/multithreaded environments, and leave uncleaned resources.
-2. **Fragile Math Operations in Streaming Data:**  
-   A single unexpected `x / 0` division instantly raises an unhandled `ZeroDivisionError`, crashing multi-hour batch ETL or machine-learning pipelines.
-3. **No Execution Telemetry:**  
-   Standard Python provides no low-level metric for how many physical bytecode instructions a function executed, making fine-grained compute billing and CPU cycle profiling impossible.
+GuardPVM is a custom build of CPython 3.16 that I developed to address safety and observability limitations in standard Python. It enforces deterministic instruction quotas, collects execution telemetry, and provides configurable zero-division recovery directly inside the interpreter's bytecode dispatch loop.
 
 ---
 
-## 💡 The GuardPVM Solution
+## The Problem in Standard Python
 
-GuardPVM modifies CPython at the core C evaluation layer (`ceval_macros.h` & `bytecodes.c`), introducing:
+When running untrusted scripts or executing long-running data jobs, stock CPython has several architectural limitations:
 
-* ⏱️ **Deterministic Step Quotas:** Enforce instruction budgets (e.g., abort cleanly after exactly 50,000 instructions) using native C stack unwinding (`goto error;`).
-* 📊 **Hardware-Grade Telemetry:** Live odometer tracking total instructions executed, function entry/exit counts, and exact opcode frequency distributions.
-* 🛡️ **Zero-Division Recovery ("Airbag Mode"):** Dynamically switch division behavior between standard crash (`strict`) and graceful fallback (`recover`, returning `0` and incrementing incident logs).
-* 🏷️ **Runtime Flavor Identity:** Embedded `[GuardPVM v1.0]` identity tag in `sys.version` for auditing and compliance.
+1. **Denial of Service from Runaway Loops:**  
+   Code such as `while True: pass` consumes 100% CPU. Traditional wall-clock timeouts (like `signal.SIGALRM` or background watchdog threads) are non-deterministic, vary across CPU speeds, and can be unreliable on Windows or multi-threaded environments.
+2. **Fatal Division by Zero:**  
+   In stock CPython, a division by zero immediately halts execution with an unhandled `ZeroDivisionError`, crashing long batch processing jobs over a single bad record.
+3. **No Bytecode Telemetry:**  
+   Standard Python does not track the number of physical instructions executed by the virtual machine, making precise compute accounting impossible.
 
 ---
 
-## 🏗️ Architecture & Execution Flow
+## How I Implemented GuardPVM
+
+I modified CPython across 5 core files:
+
+1. **`Include/internal/pycore_guardpvm.h` & `Python/guardpvm.c`:**  
+   Created the central `_PyGuardPVMState` struct to store global telemetry (instruction steps, opcode frequency histogram, zero-division counts, and division modes).
+2. **`Python/ceval_macros.h`:**  
+   Replaced the empty release-mode macro `PRE_DISPATCH_GOTO()` with `GUARD_PVM_STEP()`. Every single bytecode instruction increments `steps_executed` and checks if the configured `step_quota` has been exceeded. If reached, it raises `RuntimeError("GuardPVM step quota exceeded")` and performs a safe C stack unwind via `goto error;`.
+3. **`Python/bytecodes.c`:**  
+   Intercepted `_BINARY_OP` arithmetic operations. When a zero-division error occurs:
+   - Increments the fault counter `zero_div_count`.
+   - In `'recover'` mode, clears the exception via `PyErr_Clear()` and returns `0`.
+   - In `'strict'` mode, preserves standard Python crash behavior.
+4. **`Python/sysmodule.c`:**  
+   Registered 6 new native functions in `sys` (`set_step_quota`, `get_step_quota`, `get_guard_stats`, `reset_guard_stats`, `set_div_mode`, `get_div_mode`) to allow userspace control.
+5. **`Python/pylifecycle.c` & `Python/getversion.c`:**  
+   Hooked `_Py_GuardPVM_Init()` into early VM boot, and tagged `sys.version` with `[GuardPVM v1.0]`.
+
+---
+
+## Execution Lifecycle
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as User / Host Application
+    actor User as User Script
     participant Sys as sys Module (sysmodule.c)
     participant State as _PyGuardPVMState (pycore_guardpvm.h)
-    participant PVM as Bytecode Dispatch Loop (ceval_macros.h)
-    participant Opcode as Opcode Handlers (bytecodes.c)
+    participant Loop as Dispatch Loop (ceval_macros.h)
+    participant Op as Opcode Handler (bytecodes.c)
 
     User->>Sys: sys.set_step_quota(50000)
     Sys->>State: Store step_quota = 50000
-    
+
     loop Every Bytecode Instruction
-        PVM->>State: GUARD_PVM_STEP() -> steps_executed++
-        PVM->>State: Check (steps_executed >= step_quota)
+        Loop->>State: Increment steps_executed
+        Loop->>State: Check if steps_executed >= step_quota
         alt Quota Exceeded
-            PVM-->>User: Raise RuntimeError("GuardPVM step quota exceeded") via goto error;
-        else Budget OK
-            PVM->>Opcode: DISPATCH_GOTO() (Execute opcode)
-            alt Division by Zero in Recover Mode
-                Opcode->>State: zero_div_count++
-                Opcode-->>PVM: Clear error, return 0
+            Loop-->>User: Raise RuntimeError via goto error;
+        else Quota OK
+            Loop->>Op: Execute instruction
+            alt Zero Division in Recover Mode
+                Op->>State: Increment zero_div_count
+                Op-->>Loop: Clear exception, return 0
             end
         end
     end
 
     User->>Sys: sys.get_guard_stats()
-    Sys-->>User: Return telemetry dict (steps, opcodes, fault counts)
+    Sys-->>User: Return telemetry dictionary
 ```
 
 ---
 
-## ⚡ Quick Start: Dual Run Comparison
+## Dual Run Comparison
 
-See the difference between unmodified stock Python and GuardPVM:
-
-### 🔴 Scenario A: Unmodified Stock Python (Runaway Loop Hang)
+### Scenario A: Unmodified Stock Python (Runaway Loop Hang)
 ```bash
-# Running against stock python3
 $ python3 examples/01_basic_sandbox.py
 ```
-**Outcome:**
+**Output:**
 ```
 🔴 RUNTIME CHECK FAILED:
 This Python interpreter does NOT have GuardPVM capabilities.
-Current version: 3.14.0 (main, Oct 2026)
+Current version: 3.14.0
 AttributeError: module 'sys' has no attribute 'set_step_quota'
-# Note: If run without checks, stock Python hangs at 100% CPU indefinitely!
 ```
 
-### 🟢 Scenario B: Upgraded GuardPVM Engine (Deterministic Protection)
+### Scenario B: Upgraded GuardPVM Engine (Deterministic Protection)
 ```bash
-# Running against GuardPVM
 $ guard-python examples/01_basic_sandbox.py
 ```
-**Outcome:**
+**Output:**
 ```
 =================================================================
  GUARDPVM STEP QUOTA SANDBOX DEMO
@@ -100,7 +104,7 @@ $ guard-python examples/01_basic_sandbox.py
   3.16.0a5+ [GuardPVM v1.0, GCC 15.2.0]
 
 Initial Odometer Reading: 42 steps
---> Setting Fuel Limit (Step Quota) to: 10,000 instructions
+--> Setting step quota to: 10,000 instructions
 --> Entering untrusted user code (Infinite Loop)...
 
 🟢 [SUCCESSFULLY INTERCEPTED BY GUARDPVM]
@@ -113,131 +117,107 @@ Initial Odometer Reading: 42 steps
   Zero Div Intercept: 0
   Top 3 Opcodes     : [('BINARY_OP', 3333), ('LOAD_FAST', 3333), ('STORE_FAST', 1667)]
 
-✅ Sandboxing verified: Host process survived without hanging!
+Sandboxing verified: Host process survived without hanging!
 ```
 
 ---
 
-## 📁 Repository Structure
-
-The repository is organized according to production engineering standards:
+## Project Structure
 
 ```
 GuardPVM/
-├── README.md                      # Primary documentation & user guide
+├── README.md                      # Project documentation and guide
 ├── COMPARISON.md                  # Side-by-side upstream CPython vs GuardPVM diffs
-├── .gitignore                     # Git ignore rules for caches, builds, and artifacts
+├── .gitignore                     # Git ignore rules
 │
-├── src/                           # Core implementation and SDKs
-│   ├── main.py                    # Central codebase map & quick-start runner
-│   ├── core/                      # Modified CPython C source files
+├── src/                           # Source files
+│   ├── main.py                    # Central codebase map & quickstart runner
+│   ├── core/                      # Modified CPython 3.16 source files
 │   │   ├── Include/internal/
-│   │   │   └── pycore_guardpvm.h  # Shared telemetry struct (_PyGuardPVMState)
+│   │   │   └── pycore_guardpvm.h  # State struct header
 │   │   └── Python/
-│   │       ├── ceval_macros.h     # Core instruction dispatch hook (GUARD_PVM_STEP)
-│   │       ├── bytecodes.c        # Arithmetic zero-division airbag interceptor
-│   │       ├── guardpvm.c         # Engine state logic & environment variable parser
-│   │       ├── sysmodule.c        # Python 'sys' module API bindings
-│   │       ├── pylifecycle.c      # Boot initialization hook (_Py_GuardPVM_Init)
-│   │       └── getversion.c       # Custom flavor branding banner ([GuardPVM v1.0])
-│   ├── guardpvm/                  # Python SDK Package (pip install)
-│   │   ├── __init__.py            # High-level context managers & sandbox runners
-│   │   └── setup.py               # setuptools packaging metadata
-│   └── node/                      # Node.js SDK Package (npm install)
-│       ├── index.js               # GuardPVM JavaScript class wrapper
+│   │       ├── ceval_macros.h     # Instruction dispatch hook (GUARD_PVM_STEP)
+│   │       ├── bytecodes.c        # Arithmetic opcode interceptor
+│   │       ├── guardpvm.c         # Engine backend and env var parser
+│   │       ├── sysmodule.c        # sys module C bindings
+│   │       ├── pylifecycle.c      # Boot hook (_Py_GuardPVM_Init)
+│   │       └── getversion.c       # Version banner branding
+│   ├── guardpvm/                  # Python SDK package
+│   │   ├── __init__.py            # Context managers and runner
+│   │   └── setup.py               # setuptools configuration
+│   └── node/                      # Node.js SDK package
+│       ├── index.js               # GuardPVM Node client class
 │       └── package.json           # npm package metadata
 │
-├── scripts/                       # Build & installation automation
-│   ├── install.sh                 # Fast installer for /opt/guard-pvm binaries
-│   └── build.sh                   # From-source compiler script
+├── scripts/                       # Automation scripts
+│   ├── install.sh                 # Precompiled binary installer
+│   └── build.sh                   # Build from source script
 │
-├── tests/                         # Automated test suite
-│   ├── test_guardpvm.py           # Engine verification & benchmark test suite
+├── tests/                         # Automated test suites
+│   ├── test_guardpvm.py           # Engine verification & benchmark suite
 │   └── test_sdk.py                # Python SDK unit tests
 │
-└── examples/                      # Runnable demonstrations with dual run guides
-    ├── 01_basic_sandbox.py        # Step Quota protection against infinite loops
-    ├── 02_zero_div_recovery.py    # Zero-division strict vs recover airbag demo
-    ├── 03_telemetry_benchmark.py  # VM instruction telemetry & speed benchmark
-    └── 04_node_integration.js     # Running sandboxed Python from Node.js
+└── examples/                      # Runnable demonstrations
+    ├── 01_basic_sandbox.py        # Step quota demo
+    ├── 02_zero_div_recovery.py    # Zero-division strict vs recover demo
+    ├── 03_telemetry_benchmark.py  # Performance and telemetry benchmark
+    └── 04_node_integration.js     # Running sandboxed code from Node.js
 ```
 
 ---
 
-## 🛠️ Installation
+## Installation
 
-### Option 1: Fast Automated Installation (Linux / WSL2)
+### 1. Build and Install Runtime from Source
 ```bash
 git clone https://github.com/Orionpluxary/GuardPVM.git
 cd GuardPVM
-bash scripts/install.sh
-```
-
-### Option 2: Build From Source
-```bash
 bash scripts/build.sh
 ```
 
-### Option 3: Python SDK
+### 2. Python SDK (`pip`)
 ```bash
 pip install -e src/guardpvm
+# Or install directly from GitHub:
+pip install "git+https://github.com/Orionpluxary/GuardPVM.git#subdirectory=src/guardpvm"
 ```
 
-### Option 4: Node.js SDK
+### 3. Node.js SDK (`npm`)
 ```bash
 cd src/node
 npm install
+# Or install directly from GitHub:
+npm install "https://github.com/Orionpluxary/GuardPVM.git#main:src/node"
 ```
 
 ---
 
-## 📖 API Reference
+## API Reference (`import sys`)
 
-### Python Native API (`import sys`)
-
-| Function | Signature | Description |
-| :--- | :--- | :--- |
-| `set_step_quota` | `sys.set_step_quota(limit: int) -> None` | Sets maximum instructions allowed. Set `0` for unlimited. |
-| `get_step_quota` | `sys.get_step_quota() -> int` | Returns current instruction budget. |
-| `get_guard_stats` | `sys.get_guard_stats() -> dict` | Returns dictionary of execution telemetry (steps, faults, opcodes). |
-| `reset_guard_stats` | `sys.reset_guard_stats() -> None` | Resets execution odometer and fault counters to zero. |
-| `set_div_mode` | `sys.set_div_mode(mode: str) -> None` | Sets division mode: `'strict'` (crash) or `'recover'` (airbag 0). |
-| `get_div_mode` | `sys.get_div_mode() -> str` | Returns current division mode (`'strict'` or `'recover'`). |
-
-### Environment Variables
-
-GuardPVM can be configured globally without code modifications:
-* `GUARD_PVM_STEP_QUOTA`: Set global initial step budget (e.g. `export GUARD_PVM_STEP_QUOTA=1000000`).
-* `GUARD_PVM_DIV_MODE`: Set initial division mode (`export GUARD_PVM_DIV_MODE="recover"`).
+| Method | Description |
+| :--- | :--- |
+| `sys.set_step_quota(limit: int)` | Sets instruction limit. Pass `0` for unlimited. |
+| `sys.get_step_quota() -> int` | Returns current instruction budget. |
+| `sys.get_guard_stats() -> dict` | Returns telemetry dict (steps, opcodes, fault counts). |
+| `sys.reset_guard_stats()` | Resets step and fault counters to zero. |
+| `sys.set_div_mode(mode: str)` | Sets division handling mode: `'strict'` or `'recover'`. |
+| `sys.get_div_mode() -> str` | Returns current division mode. |
 
 ---
 
-## 🚀 Practical Use Cases
+## Performance Benchmarks
 
-1. **AI Agent Code Execution Sandboxes:**  
-   Large Language Models (LLMs) frequently generate runaway loops or divide-by-zero errors. GuardPVM limits agent computation deterministically regardless of CPU speed.
-2. **Competitive Programming & Online Judges:**  
-   Platforms like LeetCode and Codeforces can enforce exact bytecode step quotas instead of unreliable wall-clock timers.
-3. **Resilient Data Engineering & Streaming Pipelines:**  
-   High-throughput streaming jobs (processing millions of sensor records) avoid pipeline halting when dirty data contains zero denominators.
-4. **Serverless Function Billing:**  
-   Cloud providers can measure exact physical instructions executed per function invocation to bill customers accurately.
-
----
-
-## 📊 Performance Benchmarks
-
-Overhead benchmarked across **2,500,000 tight arithmetic loop iterations**:
+Benchmarked across 2,500,000 iterations of an arithmetic compute loop:
 
 | Metric | Stock CPython 3.14 | GuardPVM v1.0 | Overhead |
 | :--- | :--- | :--- | :--- |
 | **Execution Time** | 0.082s | 0.098s | **+19.5%** |
-| **Instructions Tracked** | 0 (None) | 10,000,042 | **Full Hardware-Grade Telemetry** |
-| **Opcode Profiling** | None | Real-time Top Opcodes | **Built-in** |
-| **DoS Vulnerability** | ⚠️ Freezes Process | 🛡️ Safely Aborted in 0.1ms | **Protected** |
+| **Instruction Tracking** | None | 10,000,042 steps | Full Telemetry |
+| **Opcode Breakdown** | None | Real-time Top Opcodes | Built-in |
+| **Infinite Loop Protection** | Freezes thread | Terminated in 0.1ms | Safe |
 
 ---
 
-## 📄 License
+## License
 
 GuardPVM is released under the **MIT License**. Upstream CPython is subject to the Python Software Foundation (PSF) License.

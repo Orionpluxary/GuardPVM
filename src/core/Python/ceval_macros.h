@@ -179,9 +179,10 @@
 
 /* PRE_DISPATCH_GOTO() does lltrace if enabled. Normally a no-op */
 
-/* =========================================================================
- * 🔴 ORIGINAL UPSTREAM CPYTHON CODE (Python/ceval_macros.h):
- * -------------------------------------------------------------------------
+/*
+ * =========================================================================
+ * ORIGINAL UPSTREAM CPYTHON CODE (Python/ceval_macros.h):
+ * =========================================================================
  * #ifdef Py_DEBUG
  * #define PRE_DISPATCH_GOTO() do { \
  *     if (frame->lltrace >= 5) { \
@@ -191,64 +192,35 @@
  * #else
  * #define PRE_DISPATCH_GOTO() ((void)0)
  * #endif
- * ========================================================================= */
-
-/* =========================================================================
- * 🟢 GUARDPVM MODIFIED CODE: GUARD_PVM_STEP() HOOK
+ *
  * =========================================================================
- * 
- * [WHAT CHANGED]:
- * 1. Original CPython mein: Release build mein PRE_DISPATCH_GOTO() bilkul khali
- *    tha (`#define PRE_DISPATCH_GOTO() ((void)0)`). Matlab Python har opcode
- *    bina kisi boundary check ke blindfolded chalata tha.
- * 2. GuardPVM mein: Humne PRE_DISPATCH_GOTO() ko `GUARD_PVM_STEP()` se replace kiya.
- * 
- * [WHY IT IS USED]:
- * 1. Zero-Escape Hook: CPython ke bytecode loop (`ceval.c`) mein har ek instruction
- *    DISPATCH() macro se hokar guzarta hai. Is point par hook lagane se ek bhi
- *    opcode bina audit/check ke execute nahi ho sakta.
- * 2. Deterministic Quota Enforcement: Clock time (seconds) ki jagah hum discrete
- *    instructions (steps) count karte hain jo hardware speed se independent hota hai.
- *    (Same code hamesha exact same steps lega!).
- * 3. Safe Unwind: Quota exceed hone par `goto error;` call hota hai jo CPython ke
- *    built-in stack frame cleaner ko trigger karta hai, jisse memory leaks nahi hote.
- * 
- * [REAL-WORLD USE CASE / VIVA ANSWER]:
- * "Sir, jab user ya student untrusted Python code run karta hai (jaise LeetCode ya
- *  online compiler me: `while True: pass`), stock Python server ko hang kar deta hai
- *  ya 100% CPU lock kar deta hai.
- *  GuardPVM is hook ke through exactly 10,000 ya 1,000,000 steps ke baad clean
- *  RuntimeError raise karke thread ko gracefully terminate kar deta hai!"
- * ========================================================================= */
+ * MY MODIFICATION: GUARD_PVM_STEP() HOOK
+ * =========================================================================
+ * In release mode, stock CPython leaves PRE_DISPATCH_GOTO() as a no-op ((void)0).
+ * I hooked GUARD_PVM_STEP() directly here so that every single instruction
+ * passes through my odometer and quota check right before execution:
+ *
+ * 1. Count instruction execution (_Py_GuardPVM_State.steps_executed++).
+ * 2. Record opcode frequency in the opcode_counts array (0-511).
+ * 3. Enforce deterministic step quota:
+ *    - Disarm the quota temporarily so traceback generation doesn't fault.
+ *    - Sync frame->instr_ptr and next_instr so Python shows the exact line number.
+ *    - Raise RuntimeError("GuardPVM step quota exceeded").
+ *    - Jump to CPython's standard 'goto error;' for clean stack frame unwinding.
+ * =========================================================================
+ */
 #define GUARD_PVM_STEP() do { \
-    /* LINE 1: Odometer ko +1 se aage badhao */ \
-    _Py_GuardPVM_State.steps_executed++; /* [KEYWORD: Odometer] Hardware instruction executed */ \
-    \
-    /* LINE 2: Boundary check: Opcode array index out-of-bounds na ho */ \
-    if ((unsigned int)(opcode) < 512) { /* [KEYWORD: Safety Rail] Safe 0-511 opcode range */ \
-        /* LINE 3: Specific action ka count diary me badhao */ \
-        _Py_GuardPVM_State.opcode_counts[(unsigned int)(opcode)]++; /* [KEYWORD: Tally] Instruction count + 1 */ \
+    _Py_GuardPVM_State.steps_executed++; \
+    if ((unsigned int)(opcode) < 512) { \
+        _Py_GuardPVM_State.opcode_counts[(unsigned int)(opcode)]++; \
     } \
-    \
-    /* LINE 4: Check karo kya user ne quota budget lagaya hai? */ \
     if (_Py_GuardPVM_State.step_quota > 0 && \
-        /* LINE 5: Aur kya steps ne quota limit ko cross kar diya? */ \
-        _Py_GuardPVM_State.steps_executed >= (uint64_t)_Py_GuardPVM_State.step_quota) { /* [KEYWORD: Red Line] Quota Hit! */ \
-        \
-        /* LINE 6: Disarm quota taaki exception traceback cleanup bina rukawat chal sake */ \
-        _Py_GuardPVM_State.step_quota = 0; /* [KEYWORD: Fuse Disarm] Prevent recursive quota faults */ \
-        \
-        /* LINE 7: Pointer frame me bookmark karo taaki user ko exact line number dikhe */ \
-        frame->instr_ptr = next_instr; /* [KEYWORD: Bookmark] Sync frame pointer */ \
-        \
-        /* LINE 8: Agle instruction ka pointer safe state me rakho */ \
-        next_instr = next_instr + 1; /* [KEYWORD: Pointer Advance] Safe instruction boundary */ \
-        \
-        /* LINE 9: Python exception register me RuntimeError raise karo */ \
-        PyErr_SetString(PyExc_RuntimeError, "GuardPVM step quota exceeded"); /* [KEYWORD: Siren] Raise clean RuntimeError */ \
-        \
-        /* LINE 10: Seedha CPython ke standard cleanup routine pe jump! (No memory leaks) */ \
-        goto error; /* [KEYWORD: Fire Exit] Unwind stack frames safely */ \
+        _Py_GuardPVM_State.steps_executed >= (uint64_t)_Py_GuardPVM_State.step_quota) { \
+        _Py_GuardPVM_State.step_quota = 0; \
+        frame->instr_ptr = next_instr; \
+        next_instr = next_instr + 1; \
+        PyErr_SetString(PyExc_RuntimeError, "GuardPVM step quota exceeded"); \
+        goto error; \
     } \
 } while (0)
 #ifdef Py_DEBUG

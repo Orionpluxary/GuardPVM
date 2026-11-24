@@ -5898,9 +5898,10 @@ dummy_func(
             assert(oparg <= NB_OPARG_LAST);
         }
 
-        /* =========================================================================
-         * 🔴 ORIGINAL UPSTREAM CPYTHON CODE (Python/bytecodes.c):
-         * -------------------------------------------------------------------------
+        /*
+         * =========================================================================
+         * ORIGINAL UPSTREAM CPYTHON CODE (Python/bytecodes.c):
+         * =========================================================================
          * op(_BINARY_OP, (lhs, rhs -- res, l, r)) {
          *     PyObject *lhs_o = PyStackRef_AsPyObjectBorrow(lhs);
          *     PyObject *rhs_o = PyStackRef_AsPyObjectBorrow(rhs);
@@ -5915,49 +5916,41 @@ dummy_func(
          *     DEAD(lhs);
          *     DEAD(rhs);
          * }
+         *
          * =========================================================================
-         * 🟢 GUARDPVM MODIFIED CODE: ZERO-DIVISION AIRBAG & TELEMETRY
+         * MY MODIFICATION: ZERO-DIVISION RECOVERY & FAULT TELEMETRY
          * =========================================================================
-         * 
-         * [WHAT CHANGED]:
-         * Original CPython mein agar koi division error hoti thi toh sidha 
-         * `if (res_o == NULL) ERROR_NO_POP();` chal jata tha (immediate crash).
-         * GuardPVM mein humne exception ko inspect kiya:
-         * 1. Telemetry log ki: `_Py_GuardPVM_State.zero_div_count++`
-         * 2. Agar mode == 'recover' (1) hai: toh exception ko `PyErr_Clear()` se
-         *    erase karke safe default value `0` inject kar di!
-         * 
-         * [WHY IT IS USED]:
-         * Critical pipelines mein divide-by-zero fatal error nahi banna chahiye.
-         * Default CPython behavior ('strict') 100% preserve rehta hai jab tak user
-         * explicitly 'recover' mode switch na kare.
-         * 
-         * [REAL-WORLD USE CASE / VIVA ANSWER]:
-         * "Sir, Big Data streaming ya IoT sensor pipelines mein million records
-         *  process hote hain. Ek bad sensor reading (zero divisor) pure 10-hour
-         *  batch job ko crash kar sakti hai.
-         *  GuardPVM is error ko silently swallow karta hai, telemetry count badhata hai,
-         *  aur pipeline ko unbroken chalne deta hai!"
-         * ========================================================================= */
+         * In stock CPython, if division fails (denominator == 0), res_o is NULL
+         * and ERROR_NO_POP() immediately raises ZeroDivisionError, halting execution.
+         *
+         * What I added:
+         * 1. Check if the error is PyExc_ZeroDivisionError.
+         * 2. Increment my fault counter: _Py_GuardPVM_State.zero_div_count++.
+         * 3. If div_mode == 1 ('recover'):
+         *    - Clear the error with PyErr_Clear().
+         *    - Substitute a safe 0 integer: res_o = PyLong_FromLong(0).
+         *    - This allows long-running data or inference pipelines to keep running.
+         * 4. If div_mode == 0 ('strict'):
+         *    - res_o remains NULL and ERROR_NO_POP() executes, keeping standard
+         *      Python crash behavior intact.
+         * =========================================================================
+         */
         op(_BINARY_OP, (lhs, rhs -- res, l, r)) {
             PyObject *lhs_o = PyStackRef_AsPyObjectBorrow(lhs);
             PyObject *rhs_o = PyStackRef_AsPyObjectBorrow(rhs);
 
             assert(_PyEval_BinaryOps[oparg]);
             PyObject *res_o = _PyEval_BinaryOps[oparg](lhs_o, rhs_o);
-            if (res_o == NULL) { /* [KEYWORD: Math Failed] Calculation returned NULL */
-                /* Check: Kya shock divide-by-zero ki wajah se laga? */
-                if (PyErr_ExceptionMatches(PyExc_ZeroDivisionError)) { /* [KEYWORD: Zero Div Trap] */
-                    _Py_GuardPVM_State.zero_div_count++; /* [KEYWORD: Telemetry Log] Zero div counter + 1 */
-                    /* Agar user ne Recover Mode (Airbag) on kiya hai: */
-                    if (_Py_GuardPVM_State.div_mode == 1) { /* [KEYWORD: Airbag Mode] 1 = recover */
-                        PyErr_Clear(); /* [KEYWORD: Whiteout Eraser] Red alert ko duster se mita diya */
-                        res_o = PyLong_FromLong(0); /* [KEYWORD: Soft Cushion] Safe 0 integer pakda diya */
+            if (res_o == NULL) {
+                if (PyErr_ExceptionMatches(PyExc_ZeroDivisionError)) {
+                    _Py_GuardPVM_State.zero_div_count++;
+                    if (_Py_GuardPVM_State.div_mode == 1) {
+                        PyErr_Clear();
+                        res_o = PyLong_FromLong(0);
                     }
                 }
-                /* Agar STRICT mode tha (res_o abhi bhi NULL hai), toh normal crash hone do */
                 if (res_o == NULL) {
-                    ERROR_NO_POP(); /* [KEYWORD: Fatal Crash] Normal ZeroDivisionError exception */
+                    ERROR_NO_POP();
                 }
             }
             res = PyStackRef_FromPyObjectSteal(res_o);

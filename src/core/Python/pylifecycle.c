@@ -569,18 +569,12 @@ pycore_init_runtime(_PyRuntimeState *runtime,
     _PyRuntimeState_SetFinalizing(runtime, NULL);
 
     _Py_InitVersion();
-    /* =========================================================================
-     * 🛡️ GUARDPVM ZERO-DAY BOOT HOOK
-     * =========================================================================
-     * [WHAT CHANGED]:
-     * CPython lifecycle startup sequence (`pycore_init_runtime`) mein humne
-     * `_Py_GuardPVM_Init()` call inject kiya.
-     * 
-     * [WHY IT IS USED & USE CASE]:
-     * Guarantee of Protection: Python ke pehle module import ya pehle bytecode
-     * ke chalne se pehle hi GuardPVM telemetry state zero-out ho jata hai aur
-     * environment variables load ho jate hain.
-     * ========================================================================= */
+    /*
+     * Boot hook:
+     * I added _Py_GuardPVM_Init() here in the early runtime lifecycle
+     * so that telemetry counters are reset and environment variables are
+     * parsed before importlib or user scripts execute.
+     */
     _Py_GuardPVM_Init();
     _Py_DumpTraceback_Init();
 

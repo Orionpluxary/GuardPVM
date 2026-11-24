@@ -6,28 +6,17 @@
  * Compiled directly into the CPython binary as part of the core runtime.
  * ============================================================================= */
 
-/* =========================================================================
- * 🛡️ GUARDPVM RUNTIME ENGINE LOGIC (Implementation)
- * =========================================================================
- * 
- * [WHAT CHANGED]:
- * Yeh file original CPython codebase mein nahi thi. Yeh GuardPVM ka 100% naya
- * C source file hai jisko humne Python build system (Makefile/Setup) ke sath link kiya.
- * 
- * [WHY IT IS USED]:
- * 1. Separation of Concerns: Core CPython files (`ceval.c`, `sysmodule.c`) ko clean
- *    rakhne ke liye GuardPVM ki helper logic yahan isolate ki gayi hai.
- * 2. Environment Variable Parsing: Startup par `GUARD_PVM_STEP_QUOTA` aur
- *    `GUARD_PVM_DIV_MODE` ko safely parse karta hai bina kisi dynamic allocation ke.
- * 3. Python Dict Serialization: C struct ke telemetry data ko fast Python dictionary
- *    me convert karta hai jab user `sys.get_guard_stats()` call karta hai.
- * 
- * [REAL-WORLD USE CASE / VIVA ANSWER]:
- * "Sir, Docker containers aur Kubernetes pods mein code change kiye bina agar
- *  hum runtime environment variables se pure container ka execution quota limit
- *  karna chahein, toh yeh module boot-time par un environment variables ko detect
- *  karke engine ko auto-configure kar deta hai."
- * ========================================================================= */
+/*
+ * GuardPVM runtime implementation.
+ *
+ * Implements the backend functions declared in pycore_guardpvm.h:
+ * 1. _Py_GuardPVM_Init: initializes telemetry state and parses GUARD_PVM_STEP_QUOTA
+ *    and GUARD_PVM_DIV_MODE environment variables on boot.
+ * 2. _Py_GuardPVM_GetStats: converts internal C counters to a Python dictionary
+ *    containing steps_executed, call_count, zero_div_count, div_mode, and top_opcodes.
+ * 3. _Py_GuardPVM_ResetStats: zeroes out execution counters for fresh benchmarks.
+ * 4. Quota and div_mode setters and getters.
+ */
 
 #include "Python.h"
 #include "pycore_guardpvm.h"

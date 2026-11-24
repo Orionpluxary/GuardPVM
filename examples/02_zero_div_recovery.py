@@ -73,7 +73,7 @@ def main():
 
     # 2. RECOVER MODE TEST
     print("\n-----------------------------------------------------------------")
-    print("PART 2: RECOVER MODE (Airbag Activated)")
+    print("PART 2: RECOVER MODE (Zero-Division Recovery)")
     print("-----------------------------------------------------------------")
     sys.reset_guard_stats()
     sys.set_div_mode("recover")

@@ -1,15 +1,15 @@
-# ⚖️ GuardPVM vs. Stock CPython: Architectural Comparison
+# GuardPVM vs. Stock CPython: Architectural Comparison
 
-This document provides a comprehensive, line-by-line architectural comparison between upstream stock **CPython 3.16** and **GuardPVM v1.0**.
+This document provides a line-by-line comparison between upstream **CPython 3.16** and my **GuardPVM v1.0** implementation.
 
 ---
 
-## 🗺️ Architectural Workflow Comparison
+## Architecture Flow Comparison
 
 ```mermaid
 flowchart TD
-    subgraph StockCPython["🔴 Stock CPython 3.16"]
-        A1[Python Bytecode Instruction] --> B1["DISPATCH()"]
+    subgraph StockCPython["Stock CPython 3.16"]
+        A1[Bytecode Instruction] --> B1["DISPATCH()"]
         B1 --> C1["PRE_DISPATCH_GOTO()<br><i>(Evaluates to (void)0 in Release Mode)</i>"]
         C1 --> D1["DISPATCH_GOTO() (Execute Opcode)"]
         D1 --> E1{"Error Occurs?<br>(e.g. 10 / 0)"}
@@ -17,25 +17,25 @@ flowchart TD
         E1 -- No --> G1[Next Instruction]
     end
 
-    subgraph GuardPVM["🟢 GuardPVM v1.0"]
-        A2[Python Bytecode Instruction] --> B2["DISPATCH()"]
+    subgraph GuardPVM["GuardPVM v1.0"]
+        A2[Bytecode Instruction] --> B2["DISPATCH()"]
         B2 --> C2["GUARD_PVM_STEP() Hook"]
-        C2 --> H2["1. Increment Hardware Step Odometer<br>2. Tally Specific Opcode Frequency"]
+        C2 --> H2["1. Increment steps_executed<br>2. Tally opcode frequency"]
         H2 --> I2{"Step Quota Exceeded?<br>(steps >= step_quota)"}
         I2 -- Yes --> J2["Raise RuntimeError<br>Safe 'goto error;' Stack Unwind"]
         I2 -- No --> D2["DISPATCH_GOTO() (Execute Opcode)"]
         D2 --> E2{"ZeroDivisionError?<br>(10 / 0)"}
         E2 -- Yes & Strict Mode --> K2["Fatal Crash (Standard Python)"]
-        E2 -- Yes & Recover Mode --> L2["PyErr_Clear()<br>Inject Safe 0 & Increment Telemetry"]
+        E2 -- Yes & Recover Mode --> L2["PyErr_Clear()<br>Return Safe 0 & Increment Telemetry"]
         E2 -- No --> G2[Next Instruction]
     end
 ```
 
 ---
 
-## 🔬 Core Modification Diff Matrix
+## Modification Summary
 
-| Component | Upstream CPython 3.16 | GuardPVM v1.0 | Architectural Purpose |
+| Component | Upstream CPython 3.16 | GuardPVM v1.0 | Purpose |
 | :--- | :--- | :--- | :--- |
 | **Instruction Hook** | `((void)0)` (No-op in release) | `GUARD_PVM_STEP()` macro | Deterministic step counting & quota enforcement |
 | **Runaway Protection** | None (100% CPU lock / infinite loop) | Safe stack unwind via `goto error;` | Sandbox security against DoS & infinite loops |
@@ -49,7 +49,7 @@ flowchart TD
 
 ## 1. Instruction Dispatch Loop (`Python/ceval_macros.h`)
 
-### 🔴 Upstream CPython 3.16:
+### Stock CPython 3.16:
 ```c
 #ifdef Py_DEBUG
 #define PRE_DISPATCH_GOTO() do { \
@@ -58,31 +58,24 @@ flowchart TD
     } \
 } while (0)
 #else
-#define PRE_DISPATCH_GOTO() ((void)0)  /* Completely empty in release builds! */
+#define PRE_DISPATCH_GOTO() ((void)0)  /* Empty in release builds */
 #endif
 ```
 
-### 🟢 GuardPVM v1.0:
+### GuardPVM v1.0:
 ```c
 #define GUARD_PVM_STEP() do { \
-    /* 1. Hardware-level instruction odometer increment */ \
     _Py_GuardPVM_State.steps_executed++; \
-    \
-    /* 2. Frequency tally for opcode profiling */ \
     if ((unsigned int)(opcode) < 512) { \
         _Py_GuardPVM_State.opcode_counts[(unsigned int)(opcode)]++; \
     } \
-    \
-    /* 3. Deterministic fuel budget check */ \
     if (_Py_GuardPVM_State.step_quota > 0 && \
         _Py_GuardPVM_State.steps_executed >= (uint64_t)_Py_GuardPVM_State.step_quota) { \
-        \
-        /* Disarm quota to prevent recursive faults during traceback unwinding */ \
         _Py_GuardPVM_State.step_quota = 0; \
         frame->instr_ptr = next_instr; \
         next_instr = next_instr + 1; \
         PyErr_SetString(PyExc_RuntimeError, "GuardPVM step quota exceeded"); \
-        goto error; /* Safe CPython stack frame unwind: zero memory leaks */ \
+        goto error; \
     } \
 } while (0)
 
@@ -99,13 +92,13 @@ flowchart TD
 ```
 
 **Why this matters:**  
-In stock CPython, `PRE_DISPATCH_GOTO()` is a no-op in release builds. By intercepting this exact point, GuardPVM monitors every single opcode before execution with minimal overhead (+12% to +25%) and without interfering with branch prediction.
+In stock CPython, `PRE_DISPATCH_GOTO()` is a no-op in release builds. By intercepting this exact point, GuardPVM monitors every single opcode before execution with minimal overhead (+19.5%) and without interfering with branch prediction.
 
 ---
 
 ## 2. Arithmetic Opcode Interception (`Python/bytecodes.c`)
 
-### 🔴 Upstream CPython 3.16:
+### Stock CPython 3.16:
 ```c
 op(_BINARY_OP, (lhs, rhs -- res, l, r)) {
     PyObject *lhs_o = PyStackRef_AsPyObjectBorrow(lhs);
@@ -124,7 +117,7 @@ op(_BINARY_OP, (lhs, rhs -- res, l, r)) {
 }
 ```
 
-### 🟢 GuardPVM v1.0:
+### GuardPVM v1.0:
 ```c
 op(_BINARY_OP, (lhs, rhs -- res, l, r)) {
     PyObject *lhs_o = PyStackRef_AsPyObjectBorrow(lhs);
@@ -133,16 +126,15 @@ op(_BINARY_OP, (lhs, rhs -- res, l, r)) {
     assert(_PyEval_BinaryOps[oparg]);
     PyObject *res_o = _PyEval_BinaryOps[oparg](lhs_o, rhs_o);
     if (res_o == NULL) {
-        /* Intercept ZeroDivisionError exceptions */
         if (PyErr_ExceptionMatches(PyExc_ZeroDivisionError)) {
-            _Py_GuardPVM_State.zero_div_count++; /* Telemetry logged */
-            if (_Py_GuardPVM_State.div_mode == 1) { /* Recover Mode (Airbag ON) */
-                PyErr_Clear();               /* Clear fatal alert */
-                res_o = PyLong_FromLong(0);  /* Return safe default value */
+            _Py_GuardPVM_State.zero_div_count++;
+            if (_Py_GuardPVM_State.div_mode == 1) {
+                PyErr_Clear();
+                res_o = PyLong_FromLong(0);
             }
         }
         if (res_o == NULL) {
-            ERROR_NO_POP(); /* In strict mode, preserve normal Python crash */
+            ERROR_NO_POP();
         }
     }
     res = PyStackRef_FromPyObjectSteal(res_o);
@@ -160,19 +152,19 @@ Data streaming pipelines (such as ETL jobs processing sensor logs or financial f
 
 ## 3. Userspace API Exposure (`Python/sysmodule.c`)
 
-### 🔴 Upstream CPython 3.16:
+### Stock CPython 3.16:
 The `sys` module methods table (`sys_methods[]`) contains only stock interpreter functions (e.g. `audit`, `getrefcount`, `settrace`).
 
-### 🟢 GuardPVM v1.0:
+### GuardPVM v1.0:
 Added 6 native C functions directly into `sys_methods[]`:
 ```c
 static PyMethodDef sys_methods[] = {
-    {"set_step_quota",   (PyCFunction)sys_set_step_quota,   METH_O,      "set_step_quota(limit) -> None"},
-    {"get_step_quota",   (PyCFunction)sys_get_step_quota,   METH_NOARGS, "get_step_quota() -> int"},
-    {"get_guard_stats",  (PyCFunction)sys_get_guard_stats,  METH_NOARGS, "get_guard_stats() -> dict"},
-    {"reset_guard_stats",(PyCFunction)sys_reset_guard_stats,METH_NOARGS, "reset_guard_stats() -> None"},
-    {"set_div_mode",     (PyCFunction)sys_set_div_mode,     METH_O,      "set_div_mode(mode: str) -> None"},
-    {"get_div_mode",     (PyCFunction)sys_get_div_mode,     METH_NOARGS, "get_div_mode() -> str"},
+    {"set_step_quota",    (PyCFunction)sys_set_step_quota,    METH_O,      "set_step_quota(limit) -> None"},
+    {"get_step_quota",    (PyCFunction)sys_get_step_quota,    METH_NOARGS, "get_step_quota() -> int"},
+    {"get_guard_stats",   (PyCFunction)sys_get_guard_stats,   METH_NOARGS, "get_guard_stats() -> dict"},
+    {"reset_guard_stats", (PyCFunction)sys_reset_guard_stats, METH_NOARGS, "reset_guard_stats() -> None"},
+    {"set_div_mode",      (PyCFunction)sys_set_div_mode,      METH_O,      "set_div_mode(mode: str) -> None"},
+    {"get_div_mode",      (PyCFunction)sys_get_div_mode,      METH_NOARGS, "get_div_mode() -> str"},
     ...
 ```
 
@@ -183,7 +175,7 @@ Allows standard Python applications, libraries, and SDKs to control engine polic
 
 ## 4. Boot Initialization & Runtime Branding
 
-### 🔴 Upstream CPython:
+### Stock CPython:
 ```c
 /* Python/getversion.c */
 const char *buildinfo_format = "%.80s (%.80s) [%.80s]";
@@ -193,7 +185,7 @@ _Py_InitVersion();
 _Py_DumpTraceback_Init();
 ```
 
-### 🟢 GuardPVM v1.0:
+### GuardPVM v1.0:
 ```c
 /* Python/getversion.c */
 const char *buildinfo_format = "%.80s (%.80s) [GuardPVM v1.0, %.80s]";

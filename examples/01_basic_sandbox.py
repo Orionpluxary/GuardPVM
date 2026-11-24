@@ -62,7 +62,7 @@ def main():
 
     # Set quota
     QUOTA = 10000
-    print(f"\n--> Setting Fuel Limit (Step Quota) to: {QUOTA:,} instructions")
+    print(f"\n--> Setting step quota to: {QUOTA:,} instructions")
     sys.set_step_quota(QUOTA)
 
     print("--> Entering untrusted user code (Infinite Loop)...")

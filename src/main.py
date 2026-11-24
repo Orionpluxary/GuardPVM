@@ -59,19 +59,19 @@ import time
 
 def run_quickstart():
     print("=" * 70)
-    print("       🛡️  GUARDPVM v1.0 QUICK-START VERIFICATION  🛡️")
+    print("         GUARDPVM v1.0 QUICK-START VERIFICATION")
     print("=" * 70)
 
     # 1. Check runtime capability
     is_guard = hasattr(sys, "set_step_quota") and hasattr(sys, "get_guard_stats")
     if not is_guard:
-        print("\n🔴 [WARNING] Running on standard CPython runtime.")
+        print("\n[WARNING] Running on standard CPython runtime.")
         print(f"Current Interpreter: {sys.version}")
         print("\nTo experience GuardPVM's engine features, execute with:")
         print("  $ guard-python src/main.py")
         return
 
-    print(f"🟢 [CONFIRMED] Running inside GuardPVM custom runtime:")
+    print(f"[OK] Running inside GuardPVM custom runtime:")
     print(f"   {sys.version}\n")
 
     # 2. Reset telemetry
