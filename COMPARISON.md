@@ -1,21 +1,21 @@
 # GuardPVM vs. Stock CPython: Architectural Comparison
 
-This document provides an exact, line-by-line comparison between upstream **CPython 3.16** and my **GuardPVM v1.0** implementation, including file paths and line numbers for every change.
+This document provides a line-by-line comparison between upstream **CPython 3.16** and my **GuardPVM v1.0** implementation, detailing the exact file names, original lines, and modified lines.
 
 ---
 
-## 📁 Index of Changed Files
+## 📁 Quick Index of File Names & Changed Lines
 
-| # | GuardPVM File Path | Upstream CPython File | Line Numbers | Change Type | Summary of Change |
+| # | File Name (GuardPVM) | Upstream CPython File | Original Lines (Stock CPython) | Modified Lines (GuardPVM) | What Changed |
 |---|---|---|---|---|---|
-| **1** | [`src/core/Python/ceval_macros.h`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/ceval_macros.h#L206-L237) | `Python/ceval_macros.h` | Lines 206–237 | **Modified** | Replaced empty `PRE_DISPATCH_GOTO()` with `GUARD_PVM_STEP()` instruction counting & quota check |
-| **2** | [`src/core/Python/bytecodes.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/bytecodes.c#L5943-L5957) | `Python/bytecodes.c` | Lines 5943–5957 | **Modified** | Intercepted `_BINARY_OP` division by zero to log fault and return 0 in `'recover'` mode |
-| **3** | [`src/core/Python/sysmodule.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/sysmodule.c#L48-L52) | `Python/sysmodule.c` | Lines 48–52 | **Modified** | Included `pycore_guardpvm.h` header |
-| **4** | [`src/core/Python/sysmodule.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/sysmodule.c#L2920-L3004) | `Python/sysmodule.c` | Lines 2920–3004 | **Modified** | Implemented & registered 6 new C API functions in `sys_methods[]` (`set_step_quota`, `get_guard_stats`, etc.) |
-| **5** | [`src/core/Python/pylifecycle.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/pylifecycle.c#L574-L579) | `Python/pylifecycle.c` | Lines 574–579 | **Modified** | Injected `_Py_GuardPVM_Init()` boot hook before user scripts or importlib execute |
-| **6** | [`src/core/Python/getversion.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/getversion.c#L28-L34) | `Python/getversion.c` | Lines 28–34 | **Modified** | Injected `[GuardPVM v1.0]` flavor identity tag into `sys.version` compiler brackets |
-| **7** | [`src/core/Include/internal/pycore_guardpvm.h`](file:///c:/Users/subha/python/GuardPVM/src/core/Include/internal/pycore_guardpvm.h) | *None (New)* | Full File (1–47) | **100% New** | Master header declaring `_PyGuardPVMState` shared telemetry struct and C API |
-| **8** | [`src/core/Python/guardpvm.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/guardpvm.c) | *None (New)* | Full File (1–178) | **100% New** | Backend engine logic: env var parser, telemetry dict serialization, quota setters |
+| **1** | [`src/core/Python/ceval_macros.h`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/ceval_macros.h#L208-L232) | `Python/ceval_macros.h` | Lines 172 – 176 | Lines 208 – 232 | Replaced empty dispatch macro with step quota hook |
+| **2** | [`src/core/Python/bytecodes.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/bytecodes.c#L5949-L5962) | `Python/bytecodes.c` | Lines 5899 – 5901 | Lines 5949 – 5962 | Intercepted division by zero to return 0 in recover mode |
+| **3** | [`src/core/Python/sysmodule.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/sysmodule.c#L56-L58) | `Python/sysmodule.c` | Line 39 | Lines 56 – 58 | Added `pycore_guardpvm.h` header include |
+| **4** | [`src/core/Python/sysmodule.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/sysmodule.c#L2928-L3007) | `Python/sysmodule.c` | Lines 2893 – 2894 | Lines 2928 – 3007 | Added 6 C API methods to `sys` module table |
+| **5** | [`src/core/Python/pylifecycle.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/pylifecycle.c#L578-L585) | `Python/pylifecycle.c` | Lines 563 – 565 | Lines 578 – 585 | Added `_Py_GuardPVM_Init()` boot initialization hook |
+| **6** | [`src/core/Python/getversion.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/getversion.c#L30-L40) | `Python/getversion.c` | Lines 17 – 19 | Lines 30 – 40 | Injected `[GuardPVM v1.0]` flavor identity tag into `sys.version` |
+| **7** | [`src/core/Include/internal/pycore_guardpvm.h`](file:///c:/Users/subha/python/GuardPVM/src/core/Include/internal/pycore_guardpvm.h) | *None (100% New)* | File did not exist | Lines 1 – 47 | Created central shared telemetry struct `_PyGuardPVMState` |
+| **8** | [`src/core/Python/guardpvm.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/guardpvm.c) | *None (100% New)* | File did not exist | Lines 1 – 178 | Implemented engine logic, env var parser, and telemetry dictionary |
 
 ---
 
@@ -48,13 +48,16 @@ flowchart TD
 
 ---
 
-## Detailed Line-by-Line Code Diffs
+## Detailed Line-by-Line Code Comparisons
 
-### 1. Instruction Dispatch Loop
-* **File:** [`src/core/Python/ceval_macros.h`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/ceval_macros.h#L206-L237) (Lines 206–237)
-* **Upstream:** `Python/ceval_macros.h`
+---
 
-#### Stock CPython 3.16:
+### 1. Instruction Dispatch Loop & Quota Hook
+* **File Name:** [`src/core/Python/ceval_macros.h`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/ceval_macros.h#L208-L232)
+* **Original Lines in Stock CPython:** Lines 172 – 176 (`cpython/Python/ceval_macros.h`)
+* **Modified Lines in GuardPVM:** Lines 208 – 232 (`GuardPVM/src/core/Python/ceval_macros.h`)
+
+#### 🔴 This is the original line (Lines 172 – 176 in upstream `Python/ceval_macros.h`):
 ```c
 #ifdef Py_DEBUG
 #define PRE_DISPATCH_GOTO() do { \
@@ -67,7 +70,7 @@ flowchart TD
 #endif
 ```
 
-#### GuardPVM v1.0:
+#### 🟢 This is the modified line (Lines 208 – 232 in GuardPVM `src/core/Python/ceval_macros.h`):
 ```c
 /* 😁 changes done here */
 #define GUARD_PVM_STEP() do { \
@@ -97,149 +100,210 @@ flowchart TD
 #endif
 ```
 
-**Why this matters:**  
-In stock CPython, `PRE_DISPATCH_GOTO()` is a no-op in release builds. By intercepting this exact point, GuardPVM monitors every single opcode before execution with minimal overhead (+19.5%) and without interfering with branch prediction.
+**What changed between these lines:**  
+In stock CPython, `PRE_DISPATCH_GOTO()` was a completely empty no-op in release builds. I replaced it with `GUARD_PVM_STEP()`, so every single instruction execution increments the instruction counter and checks against the quota budget before dispatching.
 
 ---
 
-### 2. Arithmetic Opcode Interception
-* **File:** [`src/core/Python/bytecodes.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/bytecodes.c#L5943-L5957) (Lines 5943–5957)
-* **Upstream:** `Python/bytecodes.c`
+### 2. Zero-Division Handling in Arithmetic Opcodes
+* **File Name:** [`src/core/Python/bytecodes.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/bytecodes.c#L5949-L5962)
+* **Original Lines in Stock CPython:** Lines 5899 – 5901 (`cpython/Python/bytecodes.c`)
+* **Modified Lines in GuardPVM:** Lines 5949 – 5962 (`GuardPVM/src/core/Python/bytecodes.c`)
 
-#### Stock CPython 3.16:
+#### 🔴 This is the original line (Lines 5899 – 5901 in upstream `Python/bytecodes.c`):
 ```c
-op(_BINARY_OP, (lhs, rhs -- res, l, r)) {
-    PyObject *lhs_o = PyStackRef_AsPyObjectBorrow(lhs);
-    PyObject *rhs_o = PyStackRef_AsPyObjectBorrow(rhs);
-
-    assert(_PyEval_BinaryOps[oparg]);
-    PyObject *res_o = _PyEval_BinaryOps[oparg](lhs_o, rhs_o);
-    if (res_o == NULL) {
-        ERROR_NO_POP();  /* Hard fatal exception - execution halts */
-    }
-    res = PyStackRef_FromPyObjectSteal(res_o);
-    l = lhs;
-    r = rhs;
-    DEAD(lhs);
-    DEAD(rhs);
-}
-```
-
-#### GuardPVM v1.0:
-```c
-op(_BINARY_OP, (lhs, rhs -- res, l, r)) {
-    PyObject *lhs_o = PyStackRef_AsPyObjectBorrow(lhs);
-    PyObject *rhs_o = PyStackRef_AsPyObjectBorrow(rhs);
-
-    assert(_PyEval_BinaryOps[oparg]);
-    PyObject *res_o = _PyEval_BinaryOps[oparg](lhs_o, rhs_o);
-
-    /* 😁 changes done here */
-    if (res_o == NULL) {
-        if (PyErr_ExceptionMatches(PyExc_ZeroDivisionError)) {
-            _Py_GuardPVM_State.zero_div_count++;
-            if (_Py_GuardPVM_State.div_mode == 1) {
-                PyErr_Clear();
-                res_o = PyLong_FromLong(0);  /* Return safe default value */
+            PyObject *res_o = _PyEval_BinaryOps[oparg](lhs_o, rhs_o);
+            if (res_o == NULL) {
+                ERROR_NO_POP();  /* Hard fatal crash - raises ZeroDivisionError */
             }
-        }
-        if (res_o == NULL) {
-            ERROR_NO_POP();  /* Strict mode: preserve standard Python behavior */
-        }
-    }
-    res = PyStackRef_FromPyObjectSteal(res_o);
-    l = lhs;
-    r = rhs;
-    DEAD(lhs);
-    DEAD(rhs);
-}
 ```
 
-**Why this matters:**  
-Data streaming pipelines (such as ETL jobs processing sensor logs or financial feeds) frequently crash when a single record contains a zero divisor. GuardPVM's recover mode neutralizes the fault, logs the occurrence, and returns `0`, keeping the pipeline alive.
+#### 🟢 This is the modified line (Lines 5949 – 5962 in GuardPVM `src/core/Python/bytecodes.c`):
+```c
+            PyObject *res_o = _PyEval_BinaryOps[oparg](lhs_o, rhs_o);
+
+            /* 😁 changes done here */
+            if (res_o == NULL) {
+                if (PyErr_ExceptionMatches(PyExc_ZeroDivisionError)) {
+                    _Py_GuardPVM_State.zero_div_count++;
+                    if (_Py_GuardPVM_State.div_mode == 1) {
+                        PyErr_Clear();
+                        res_o = PyLong_FromLong(0);  /* Substitute safe 0 return */
+                    }
+                }
+                if (res_o == NULL) {
+                    ERROR_NO_POP();  /* Strict mode: standard crash */
+                }
+            }
+```
+
+**What changed between these lines:**  
+Stock CPython immediately crashed whenever `res_o == NULL`. I added exception interception so that if the error is a `ZeroDivisionError` and `div_mode == 1` ('recover'), the runtime clears the error, increments the fault counter, and returns `0` to keep pipelines from halting.
 
 ---
 
-### 3. Userspace API Exposure
-* **File:** [`src/core/Python/sysmodule.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/sysmodule.c#L2920-L3004) (Lines 48–52 and 2920–3004)
-* **Upstream:** `Python/sysmodule.c`
+### 3. Header Include in System Module
+* **File Name:** [`src/core/Python/sysmodule.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/sysmodule.c#L56-L58)
+* **Original Lines in Stock CPython:** Line 39 (`cpython/Python/sysmodule.c`)
+* **Modified Lines in GuardPVM:** Lines 56 – 58 (`GuardPVM/src/core/Python/sysmodule.c`)
 
-#### Stock CPython 3.16:
-The `sys` module methods table (`sys_methods[]`) contains only stock interpreter functions (e.g. `audit`, `getrefcount`, `settrace`).
+#### 🔴 This is the original line (Line 39 in upstream `Python/sysmodule.c`):
+```c
+#include "pycore_sysmodule.h"
+#include "pycore_unicodeobject.h"
+```
 
-#### GuardPVM v1.0:
-Added 6 native C functions directly into `sys_methods[]`:
+#### 🟢 This is the modified line (Lines 56 – 58 in GuardPVM `src/core/Python/sysmodule.c`):
+```c
+#include "pycore_sysmodule.h"
+
+/* 😁 changes done here */
+#include "pycore_guardpvm.h"      /* GuardPVM: shared runtime state and API declarations */
+
+#include "pycore_unicodeobject.h"
+```
+
+**What changed between these lines:**  
+I included the internal `pycore_guardpvm.h` header so the `sys` module can access the global `_Py_GuardPVM_State` telemetry struct and setter functions.
+
+---
+
+### 4. API Functions and Methods Registration in `sys`
+* **File Name:** [`src/core/Python/sysmodule.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/sysmodule.c#L2928-L3007)
+* **Original Lines in Stock CPython:** Lines 2893 – 2894 (`cpython/Python/sysmodule.c`)
+* **Modified Lines in GuardPVM:** Lines 2928 – 3007 (`GuardPVM/src/core/Python/sysmodule.c`)
+
+#### 🔴 This is the original line (Lines 2893 – 2894 in upstream `Python/sysmodule.c`):
+```c
+/* Stock CPython had no GuardPVM methods in sys_methods[] */
+static PyMethodDef sys_methods[] = {
+    SYS_ADDAUDITHOOK_METHODDEF
+    SYS_AUDIT_METHODDEF
+```
+
+#### 🟢 This is the modified line (Lines 2928 – 3007 in GuardPVM `src/core/Python/sysmodule.c`):
 ```c
 /* 😁 changes done here */
+/* =========================================================================
+ * GUARDPVM SYS MODULE INTERFACE
+ * ========================================================================= */
+static PyObject *
+sys_set_step_quota(PyObject *self, PyObject *arg) { ... }
+
+static PyObject *
+sys_get_step_quota(PyObject *self, PyObject *Py_UNUSED(ignored)) { ... }
+
+static PyObject *
+sys_get_guard_stats(PyObject *self, PyObject *Py_UNUSED(ignored)) { ... }
+
+static PyObject *
+sys_reset_guard_stats(PyObject *self, PyObject *Py_UNUSED(ignored)) { ... }
+
+static PyObject *
+sys_set_div_mode(PyObject *self, PyObject *arg) { ... }
+
+static PyObject *
+sys_get_div_mode(PyObject *self, PyObject *Py_UNUSED(ignored)) { ... }
+
 static PyMethodDef sys_methods[] = {
+    /* 😁 changes done here */
     {"set_step_quota",    (PyCFunction)sys_set_step_quota,    METH_O,      "set_step_quota(limit) -> None"},
     {"get_step_quota",    (PyCFunction)sys_get_step_quota,    METH_NOARGS, "get_step_quota() -> int"},
     {"get_guard_stats",   (PyCFunction)sys_get_guard_stats,   METH_NOARGS, "get_guard_stats() -> dict"},
     {"reset_guard_stats", (PyCFunction)sys_reset_guard_stats, METH_NOARGS, "reset_guard_stats() -> None"},
     {"set_div_mode",      (PyCFunction)sys_set_div_mode,      METH_O,      "set_div_mode(mode: str) -> None"},
     {"get_div_mode",      (PyCFunction)sys_get_div_mode,      METH_NOARGS, "get_div_mode() -> str"},
-    ...
+    SYS_ADDAUDITHOOK_METHODDEF
 ```
 
-**Why this matters:**  
-Allows standard Python applications, libraries, and SDKs to control engine policies natively using `import sys` without requiring external C extensions or ctypes hacks.
+**What changed between these lines:**  
+I implemented 6 new C functions and registered them in Python's `sys` module table, allowing user Python scripts to configure step quotas and read telemetry via `import sys`.
 
 ---
 
-### 4. Boot Initialization & Runtime Branding
-* **Files:** 
-  * [`src/core/Python/pylifecycle.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/pylifecycle.c#L574-L579) (Lines 574–579)
-  * [`src/core/Python/getversion.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/getversion.c#L28-L34) (Lines 28–34)
-* **Upstream:** `Python/pylifecycle.c`, `Python/getversion.c`
+### 5. Runtime Boot Initialization Hook
+* **File Name:** [`src/core/Python/pylifecycle.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/pylifecycle.c#L578-L585)
+* **Original Lines in Stock CPython:** Lines 563 – 565 (`cpython/Python/pylifecycle.c`)
+* **Modified Lines in GuardPVM:** Lines 578 – 585 (`GuardPVM/src/core/Python/pylifecycle.c`)
 
-#### Stock CPython:
+#### 🔴 This is the original line (Lines 563 – 565 in upstream `Python/pylifecycle.c`):
 ```c
-/* Python/getversion.c */
-const char *buildinfo_format = "%.80s (%.80s) [%.80s]";
-
-/* Python/pylifecycle.c */
-_Py_InitVersion();
-_Py_DumpTraceback_Init();
+    _Py_InitVersion();
+    _Py_DumpTraceback_Init();
 ```
 
-#### GuardPVM v1.0:
+#### 🟢 This is the modified line (Lines 578 – 585 in GuardPVM `src/core/Python/pylifecycle.c`):
 ```c
-/* Python/getversion.c - Lines 28-34 */
-/* 😁 changes done here */
+    /* 😭 no changes done (Stock CPython) */
+    _Py_InitVersion();
+
+    /* 😁 changes done here */
+    /*
+     * Boot hook:
+     * I added _Py_GuardPVM_Init() here in the early runtime lifecycle
+     * so that telemetry counters are reset and environment variables are
+     * parsed before importlib or user scripts execute.
+     */
+    _Py_GuardPVM_Init();
+
+    /* 😭 no changes done (Stock CPython) */
+    _Py_DumpTraceback_Init();
+```
+
+**What changed between these lines:**  
+I added a single function call `_Py_GuardPVM_Init();` into the CPython runtime initialization sequence so that GuardPVM state and environment variables are parsed before any Python code runs.
+
+---
+
+### 6. Version Banner & Runtime Identity
+* **File Name:** [`src/core/Python/getversion.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/getversion.c#L30-L40)
+* **Original Lines in Stock CPython:** Lines 17 – 19 (`cpython/Python/getversion.c`)
+* **Modified Lines in GuardPVM:** Lines 30 – 40 (`GuardPVM/src/core/Python/getversion.c`)
+
+#### 🔴 This is the original line (Lines 17 – 19 in upstream `Python/getversion.c`):
+```c
+#ifdef Py_GIL_DISABLED
+    const char *buildinfo_format = "%.80s free-threading build (%.80s) [%.80s]";
+#else
+    const char *buildinfo_format = "%.80s (%.80s) [%.80s]";
+#endif
+```
+
+#### 🟢 This is the modified line (Lines 30 – 40 in GuardPVM `src/core/Python/getversion.c`):
+```c
+    /* 😁 changes done here */
 #ifdef Py_GIL_DISABLED
     const char *buildinfo_format = "%.80s free-threading build (%.80s) [GuardPVM v1.0, %.80s]";
 #else
     const char *buildinfo_format = "%.80s (%.80s) [GuardPVM v1.0, %.80s]";
 #endif
-
-/* Python/pylifecycle.c - Lines 574-579 */
-    _Py_InitVersion();
-    /* 😁 changes done here */
-    _Py_GuardPVM_Init(); /* Zero-day initialization before bytecode execution */
-    _Py_DumpTraceback_Init();
 ```
 
-**Why this matters:**  
-- `_Py_GuardPVM_Init()` guarantees telemetry structs are cleared and environment variables (`GUARD_PVM_STEP_QUOTA`, `GUARD_PVM_DIV_MODE`) are parsed before `importlib` or user code runs.
-- The `[GuardPVM v1.0, ...]` branding is positioned inside compiler brackets, ensuring external tools relying on `platform.python_version()` regex patterns continue functioning without regression.
+**What changed between these lines:**  
+I injected the `[GuardPVM v1.0, ...]` flavor tag inside the compiler brackets so `sys.version` identifies this engine without breaking regex parsers in standard tools.
 
 ---
 
-### 5. Master State Header & Backend Implementation
-* **Files:**
-  * [`src/core/Include/internal/pycore_guardpvm.h`](file:///c:/Users/subha/python/GuardPVM/src/core/Include/internal/pycore_guardpvm.h) (100% New File)
-  * [`src/core/Python/guardpvm.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/guardpvm.c) (100% New File)
+### 7. New Files Created for GuardPVM (100% New)
 
+#### A. Master State Header
+* **File Name:** [`src/core/Include/internal/pycore_guardpvm.h`](file:///c:/Users/subha/python/GuardPVM/src/core/Include/internal/pycore_guardpvm.h) (Lines 1 – 47)
+* **Upstream:** *Did not exist in stock CPython*
 ```c
-/* pycore_guardpvm.h */
+/* 😁 changes done here (100% New File created for GuardPVM) */
 typedef struct {
-    uint64_t steps_executed;     /* Total VM instructions executed */
-    int64_t  step_quota;         /* Maximum allowed steps before abort (0 = unlimited) */
-    uint64_t call_count;         /* Total function calls */
-    uint64_t return_count;       /* Total function returns */
-    uint64_t zero_div_count;     /* Intercepted zero-division faults */
-    int      div_mode;           /* 0 = strict, 1 = recover */
-    uint64_t opcode_counts[512]; /* Frequency histogram for each opcode */
-    int      initialized;        /* Single-init safety flag */
+    uint64_t steps_executed;       /* Hardware instruction odometer */
+    int64_t  step_quota;           /* Fuel limit before raising RuntimeError */
+    uint64_t call_count;           /* Function call counter */
+    uint64_t return_count;         /* Function exit counter */
+    uint64_t zero_div_count;       /* Zero-division faults intercepted */
+    int      div_mode;             /* 0 = strict, 1 = recover */
+    uint64_t opcode_counts[512];   /* Frequency tally for each opcode */
+    int      initialized;          /* Boot protection flag */
 } _PyGuardPVMState;
 ```
+
+#### B. Engine Backend Implementation
+* **File Name:** [`src/core/Python/guardpvm.c`](file:///c:/Users/subha/python/GuardPVM/src/core/Python/guardpvm.c) (Lines 1 – 178)
+* **Upstream:** *Did not exist in stock CPython*
+* **Purpose:** Implements `_Py_GuardPVM_Init()`, environment variable parsing (`GUARD_PVM_STEP_QUOTA`, `GUARD_PVM_DIV_MODE`), telemetry dictionary generation, and quota getters/setters.
