@@ -1,5 +1,5 @@
 /* =============================================================================
- * 😁 changes done here (Modified CPython file)
+ * 😀 changes done here (Modified CPython file)
  * - Line 574: Injected _Py_GuardPVM_Init() boot hook into early runtime lifecycle
  * - Rest of this file is standard stock CPython (😭 no changes done)
  * =============================================================================
@@ -575,7 +575,7 @@ pycore_init_runtime(_PyRuntimeState *runtime,
     /* 😭 no changes done (Stock CPython) */
     _Py_InitVersion();
 
-    /* 😁 changes done here */
+    /* 😀 changes done here */
     /*
      * Boot hook:
      * I added _Py_GuardPVM_Init() here in the early runtime lifecycle

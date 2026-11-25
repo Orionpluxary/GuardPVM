@@ -1,5 +1,5 @@
 # =============================================================================
-# 😁 changes done here (100% New File: GuardPVM Step Quota Sandbox Demo)
+# 😀 changes done here (100% New File: GuardPVM Step Quota Sandbox Demo)
 # =============================================================================
 # FILE PURPOSE:
 # Demonstrates GuardPVM's deterministic Step Quota sandbox protection.

@@ -1,6 +1,6 @@
 
 /* =============================================================================
- * 😁 changes done here (Modified CPython file)
+ * 😀 changes done here (Modified CPython file)
  * - Line 48: Added pycore_guardpvm.h header include
  * - Line 2920: Implemented sys.set_step_quota, get_guard_stats, set_div_mode C APIs
  * - Line 2994: Registered new methods in sys_methods[] table
@@ -53,7 +53,7 @@ Data members:
 /* 😭 no changes done (Stock CPython headers) */
 #include "pycore_sysmodule.h"
 
-/* 😁 changes done here */
+/* 😀 changes done here */
 #include "pycore_guardpvm.h"      /* GuardPVM: shared runtime state and API declarations */
 
 /* 😭 no changes done (Stock CPython headers) */
@@ -2928,7 +2928,7 @@ sys_get_lazy_imports_impl(PyObject *module)
 /* 😭 no changes done (Stock CPython above) */
 
 /* =========================================================================
- * 😁 changes done here
+ * 😀 changes done here
  * =========================================================================
  * GUARDPVM SYS MODULE INTERFACE
  * ========================================================================= */
@@ -2998,7 +2998,7 @@ sys_get_div_mode(PyObject *self, PyObject *Py_UNUSED(ignored))
 }
 
 static PyMethodDef sys_methods[] = {
-    /* 😁 changes done here */
+    /* 😀 changes done here */
     {"set_step_quota", (PyCFunction)sys_set_step_quota, METH_O, "set_step_quota(limit) -> None"},
     {"get_step_quota", (PyCFunction)sys_get_step_quota, METH_NOARGS, "get_step_quota() -> int"},
     {"get_guard_stats", (PyCFunction)sys_get_guard_stats, METH_NOARGS, "get_guard_stats() -> dict"},

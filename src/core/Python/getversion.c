@@ -1,5 +1,5 @@
 /* =============================================================================
- * 😁 changes done here (Modified CPython file)
+ * 😀 changes done here (Modified CPython file)
  * - Line 28: Injected '[GuardPVM v1.0]' flavor identifier tag into sys.version
  * - Rest of this file is standard stock CPython (😭 no changes done)
  * =============================================================================
@@ -27,7 +27,7 @@ void _Py_InitVersion(void)
     /* 😭 no changes done (Stock CPython) */
     initialized = 1;
 
-    /* 😁 changes done here */
+    /* 😀 changes done here */
     /*
      * Custom runtime branding:
      * I injected '[GuardPVM v1.0, %.80s]' inside the compiler bracket.

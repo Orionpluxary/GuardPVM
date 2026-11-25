@@ -1,5 +1,5 @@
 /* =============================================================================
- * 😁 changes done here (Modified CPython file)
+ * 😀 changes done here (Modified CPython file)
  * - Line 5943: Intercepted _BINARY_OP to handle ZeroDivisionError in recover mode
  * - Rest of this file is standard stock CPython (😭 no changes done)
  * =============================================================================
@@ -5946,7 +5946,7 @@ dummy_func(
             assert(_PyEval_BinaryOps[oparg]);
             PyObject *res_o = _PyEval_BinaryOps[oparg](lhs_o, rhs_o);
 
-            /* 😁 changes done here */
+            /* 😀 changes done here */
             if (res_o == NULL) {
                 if (PyErr_ExceptionMatches(PyExc_ZeroDivisionError)) {
                     _Py_GuardPVM_State.zero_div_count++;

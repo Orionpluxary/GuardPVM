@@ -1,6 +1,6 @@
 #!/usr/bin/env guard-python
 # =============================================================================
-# 😁 changes done here (100% New File: GuardPVM Test & Verification Benchmark)
+# 😀 changes done here (100% New File: GuardPVM Test & Verification Benchmark)
 # =============================================================================
 # FILE PURPOSE:
 # Core test suite and verification benchmark for GuardPVM custom runtime.

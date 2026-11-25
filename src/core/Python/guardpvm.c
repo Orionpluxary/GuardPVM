@@ -1,5 +1,5 @@
 /* =============================================================================
- * 😁 changes done here (100% New File created for GuardPVM)
+ * 😀 changes done here (100% New File created for GuardPVM)
  * Implementation of GuardPVM state, environment variable parser, and stats dictionary
  * =============================================================================
  * FILE PURPOSE:

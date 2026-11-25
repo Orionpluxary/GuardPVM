@@ -1,5 +1,5 @@
 /* =============================================================================
- * 😁 changes done here (Modified CPython file)
+ * 😀 changes done here (Modified CPython file)
  * - Line 206: Replaced PRE_DISPATCH_GOTO with GUARD_PVM_STEP instruction quota hook
  * - Rest of this file is standard stock CPython (😭 no changes done)
  * =============================================================================
@@ -198,14 +198,14 @@
  * #endif
  *
  * =========================================================================
- * 😁 changes done here
+ * 😀 changes done here
  * =========================================================================
  * In release mode, stock CPython leaves PRE_DISPATCH_GOTO() as a no-op ((void)0).
  * I hooked GUARD_PVM_STEP() directly here so that every single instruction
  * passes through my odometer and quota check right before execution.
  * =========================================================================
  */
-/* 😁 changes done here */
+/* 😀 changes done here */
 #define GUARD_PVM_STEP() do { \
     _Py_GuardPVM_State.steps_executed++; \
     if ((unsigned int)(opcode) < 512) { \

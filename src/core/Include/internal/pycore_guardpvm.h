@@ -1,5 +1,5 @@
 /* =============================================================================
- * 😁 changes done here (100% New File created for GuardPVM)
+ * 😀 changes done here (100% New File created for GuardPVM)
  * Defines _PyGuardPVMState struct and runtime telemetry variables
  * =============================================================================
  * FILE PURPOSE:
